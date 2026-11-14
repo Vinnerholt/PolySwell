@@ -1,0 +1,6 @@
+build/
+.last_zip
+*.user
+.vs/
+PolySwell/
+shots/
