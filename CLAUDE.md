@@ -19,7 +19,7 @@ Read it before touching `Source/dsp/SwelloEngine.h`. This file covers only what 
 ## What gen 2 is
 Rule for inclusion: an effect belongs only if it needs to know about individual notes.
 - **Pedal** (always visible, oxblood): signal window, ATTACK / SUSTAIN / TONE (large), FEEL (`touch`) / PACE (`follow`) /
-  FEEDBACK / DRY / LEVEL (`vol`, the output volume) (small), a chip row (swell shape, EVEN, SYNC), footswitches ON (`bypass`) and HOLD.
+  FEEDBACK / DRY / LEVEL (`vol`, the output volume) (small), a chip row (swell shape, MATCH, EVEN, SYNC), footswitches ON (`bypass`) and HOLD.
 - **Panel** (hideable; six modules, each max 4 knobs + two chip rows, each with its own muted colour):
   FILTER (teal; `filterOn`; MOD, RES, DYN, slope, BODY menu + MIX), FEEDBACK (rust; `feedbackOn`; RISE, TONE, MAX,
   harmonic, mode), MOTION (gold; `motionOn`; VIBRATO, TREMOLO, SPREAD, DETUNE + rates and modes),
@@ -33,9 +33,15 @@ Rule for inclusion: an effect belongs only if it needs to know about individual 
 Gen 1's processor, kept whole so sessions' parameter ids and user presets (`Documents\PolySwell\Presets`) stay
 compatible. Added: `juce::UndoManager undo` (passed to the APVTS; must be declared before it), parameters `holdOn`,
 `holdFade` (0.02..4 s), `holdLevel`, `holdLatch`, state `uiScale`; `uiPedalsOpen` now means "panel shown".
-HOLD (`Source/dsp/Hold.h`, test 33): 2048-point spectral freeze of the wet signal after SMEAR; the pad is ADDED, so new
-notes swell over it; no latency. Phases advance at each bin's centre frequency + a little jitter (shimmer, not buzz).
-`kNorm` was set by measurement so the pad matches the level of what was ringing (+0.2 dB in the test).
+HOLD (`Source/dsp/Hold.h`, test 33): 4096-point spectral freeze of the wet signal after SMEAR; the pad is ADDED, so new
+notes swell over it; no latency. Two frames one hop apart are analysed at the press: magnitudes and phases from the
+newer one, each bin's phase step per hop from the difference; resynthesis keeps stepping the phases, so each partial
+keeps its pitch and its bins stay in step. Owner: the first version (random start phases, bin-centre steps + jitter)
+was "a garbled mess" - do not go back. The test checks level (-0.4 dB) and that the pad is steady.
+MATCH (`levelMatch`, engine step 3a, test 34): level-matched swell. Per bin, the pick's level = loudest frame 30..110 ms
+after the onset; while the note swells the make-up `pick / level now` (max +18 dB) is blended in with the swell phase
+and then kept. It goes through the same `boost` as SUSTAIN (max of the two), so a note is never louder than its pick.
+A switch, default off (owner: sometimes wants loose playing to stay quieter). 1 s swell: -8.1 dB without, -1.8 dB with.
 
 ## Editor (Source/PluginEditor.*)
 Approved mockup: https://claude.ai/artifact/EZmkrUJoXqKFvVsBdjZ8Yd (oxblood finish, tinted modules).
@@ -51,6 +57,9 @@ Approved mockup: https://claude.ai/artifact/EZmkrUJoXqKFvVsBdjZ8Yd (oxblood fini
 - `SignalWindow`: ribbons from the engine's live output spectrum (64 log bands): a band that is a local peak draws
   a ribbon, thickness = level, pale where output exceeds input (sustain / feedback holding the note up). It stops
   repainting once everything has scrolled off.
+- Live view (owner liked gen 1's animated curves): `paintLive` draws the swell curve of the current settings, the part
+  the latest note has already played lit with a dot travelling along it (`latestNote()` age and its own attack after
+  FEEL / PACE), and the filter curve in teal at where its sweep is right now; the ribbons sit dimmed behind.
 - Knob pictures (owner: it must be obvious what a knob does): while the mouse is over a knob or it is turned,
   `SignalWindow::setFocus` fades the ribbons back and draws that knob's picture with a one-line caption:
   `paintSwell` (level over 3.5 s: dashed = the guitar, amber = after the pedal; own pictures for FEEL hard/soft pick,

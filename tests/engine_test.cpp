@@ -1337,6 +1337,39 @@ int main()
         check(std::abs(20 * std::log10(held / src)) < 3.0, "HOLD: the pad keeps the level of what was ringing");
         check(a220 > 8.0 * aOff, "HOLD: the pad keeps the notes (no smear between them)");
         check(after < 1e-5, "HOLD: fades out on release");
+        // steady: the pad must not warble (a chord in 100 ms slices; the first version, random phases, was garbled)
+        double lo = 1e9, hi = 0;
+        for (double t = 1.5; t < 2.8; t += 0.1) { const double r = rmsOf(out, t, t + 0.1); lo = std::min(lo, r); hi = std::max(hi, r); }
+        std::printf("  held pad, loudest / quietest 100 ms: %.2f\n", hi / lo);
+        check(hi / lo < 1.15, "HOLD: the pad is steady (no warble)");
+    }
+
+    std::printf("Test 34: level-matched swell\n");
+    {
+        // a plucked note that decays 8 dB/s, swelled over 1 s: without MATCH the swell tops out about 8 dB under the
+        // pick, with MATCH at about the pick's level; a steady note is left alone
+        const int n = (int) (3.0 * kSr), t0 = (int) (0.2 * kSr);
+        std::vector<float> pluck((size_t) n, 0.f), steady((size_t) n, 0.f);
+        for (int i = t0; i < n; ++i)
+        {
+            const double t = (i - t0) / kSr;
+            pluck[(size_t) i]  = 0.3f * (float) (std::sin(2 * kPi * 330.0 * i / kSr) * std::pow(10.0, -8.0 * t / 20.0));
+            steady[(size_t) i] = 0.3f * (float) std::sin(2 * kPi * 330.0 * i / kSr);
+        }
+        Params off; off.attackMs = 1000.f;
+        Params on = off; on.levelMatch = true;
+        auto peakDb = [&](const std::vector<float>& x, const Params& p)
+        {
+            const auto o = run(x, p);
+            double best = 0;
+            for (double t = 0.3; t < 2.6; t += 0.02) best = std::max(best, amp(o.wet, t0 + (int) (t * kSr) + kLatencySamples, (int) (0.1 * kSr), 330.0));
+            return 20 * std::log10(best / 0.3);
+        };
+        const double pOff = peakDb(pluck, off), pOn = peakDb(pluck, on), sOff = peakDb(steady, off), sOn = peakDb(steady, on);
+        std::printf("  plucked note, loudest point of the swell vs the pick: %.1f dB, matched %.1f dB; steady note %.1f / %.1f dB\n", pOff, pOn, sOff, sOn);
+        check(pOff < -5.0, "without MATCH a 1 s swell ends well under the pick's level");
+        check(pOn > -2.5 && pOn < 1.0, "MATCH: the swell ends about as loud as the pick, never louder");
+        check(std::abs(sOn - sOff) < 0.5, "MATCH leaves a note that does not decay alone");
     }
 
     std::printf("%s\n", failures ? "SOME TESTS FAILED" : "ALL TESTS PASSED");

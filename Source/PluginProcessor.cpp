@@ -242,6 +242,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout PolySwellProcessor::createLa
     // swell character (VG-8 BOWED spec): shape of the swell, smooth re-picks, EVEN (picks levelled)
     l.add (std::make_unique<juce::AudioParameterChoice> (PID { "swellShape", 1 }, "Swell Shape", juce::StringArray { "Classic", "Bowed" }, 0));
     l.add (std::make_unique<juce::AudioParameterBool> (PID { "smoothRepick", 1 }, "Smooth Re-pick", false));
+    l.add (std::make_unique<juce::AudioParameterBool> (PID { "levelMatch", 1 }, "Level-matched Swell", false));
     l.add (std::make_unique<APF> (PID { "even", 1 }, "Even", juce::NormalisableRange<float> (0.f, 1.f, 0.001f), 0.f));
     l.add (std::make_unique<juce::AudioParameterBool> (PID { "bowedBody", 1 }, "Bowed Body", false));
     l.add (std::make_unique<juce::AudioParameterChoice> (PID { "bodyIr", 1 }, "Body IR",
@@ -569,6 +570,7 @@ void PolySwellProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     p.pickFilter    = effective (pPick, pPickOn, 0.f);
     p.swellShape    = (int) std::lround (pSwellShape->load());
     p.smoothRepick  = pSmoothRepick->load() > 0.5f;
+    p.levelMatch    = apvts.getRawParameterValue ("levelMatch")->load() > 0.5f;
     p.even          = pEven->load();
     p.bowedBody     = pBowedBody->load() > 0.5f;
 

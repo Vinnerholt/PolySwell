@@ -63,6 +63,9 @@ namespace tuning
     constexpr float bowedK            = 3.1f;    // BOWED swell: attack spans 0.5 s / 0.161 s time constants (measured)
     constexpr float bowedExp          = 2.45f;   // BOWED swell exponent (measured S-curve)
     constexpr float bodyMakeupDb      = 3.0f;    // BODY: +3 dB so the 1..5 kHz range stays near 0 dB (the bump goes to +3)
+    constexpr float matchMaxBoost     = 8.0f;    // level-matched swell: at most +18 dB of make-up
+    constexpr float matchPeakFrom     = 0.03f;   // ... the pick's level is the loudest frame 30..110 ms after the onset
+    constexpr float matchPeakSec      = 0.11f;   //     (the first frames hold the pick's click spread over many bins)
     constexpr float repickFloor       = 0.7f;    // smooth re-pick: output kept above 0.7 x the old note (~-3 dB dip)
     constexpr float pickFilterOct     = 4.0f;    // default of Params::pickDepthOct (the UI's fallback)
     constexpr float touchRefCoef      = 0.2f;    // running average of event levels (per event)
@@ -94,6 +97,7 @@ struct Params
 {
     float attackMs   = 300.0f;   // 0 .. 3000 (0 = no swell: notes start at full level)
     int   swellShape = 0;        // 0 classic (phase^2), 1 bowed (VG-8 measured S-curve, see swellGain)
+    bool  levelMatch = false;    // the swell ends as loud as the pick was (makes up the string's decay during ATTACK)
     bool  smoothRepick = false;  // a re-pick over a ringing note re-swells from the level it has, not from silence
     float even       = 0.0f;     // 0 .. 1: EVEN, picks levelled towards the average (VG-8 DYNAMICS 100 = 0 here)
     bool  bowedBody  = false;
@@ -388,6 +392,7 @@ public:
     {
         inRing.fill(0.f);  outRing.fill(0.f);
         ref.fill(0.f);     refRaw.fill(0.f);  hold.fill(0.f);
+        matchPeak.fill(0.f); matchGain.fill(1.f);
         phase.fill(0.f);   gain.fill(0.f);    env.fill(0.f);   attackMul.fill(1.f); binStrength.fill(0.f); binEven.fill(1.f); magPrev.fill(0.f);
         active.fill(false); quiet.fill(0);
         fbAmt.fill(0.f);   fbHold.fill(0.f);  prevArg.fill(0.f);  subPhPrev.fill(0.f); subPhCur.fill(0.f);
@@ -731,6 +736,7 @@ private:
                 if (onsetBin[i])
                 {
                     hold[i] = m; env[i] = m; fbAmt[i] = 0.f; fbHold[i] = m;
+                    matchPeak[i] = 0.f; matchGain[i] = 1.f;
                     noteTime[i] = 0.f; pan[i] = eventPan;
                     // small onset (string noise etc.): plain. A bin of the latest note keeps that note's settings even
                     // after its group closed (a pluck keeps flagging onsets for a few frames as it enters the window)
@@ -742,7 +748,11 @@ private:
                     // new pick never jumps out (VG-8 BOWED: 2..4 dB dip, transient hidden)
                     repickFloor[i] = (params.smoothRepick && active[i]) ? gain[i] * magPrev[i] * tuning::repickFloor : 0.f;
                 }
-                else        { phase[i] = std::min(1.f, phase[i] + phaseInc); noteTime[i] += dt; }
+                else
+                {
+                    phase[i] = std::min(1.f, phase[i] + phaseInc); noteTime[i] += dt;
+                    if (noteTime[i] >= tuning::matchPeakFrom && noteTime[i] < tuning::matchPeakSec) matchPeak[i] = std::max(matchPeak[i], m);
+                }
                 active[i] = true;
             }
             else if (m < tuning::releaseLevel)
@@ -786,6 +796,17 @@ private:
                 const float b = params.fbMode == 1 ? 0.f : fbBloom(i);   // a harmonizer doesn't hold the note
                 if (b > 0.f && env[i] > 1e-9f)
                     boost = std::max(boost, std::pow(std::min(fbHold[i] / env[i], fbMaxBoost), b));
+            }
+            // 3a) level-matched swell: while the note swells in, the string has already decayed, so a long ATTACK ends
+            //     quieter than the pick was. Make that up: by the end of the swell the note is as loud as its pick, and
+            //     the make-up found there stays (a fixed gain per note). SUSTAIN takes over once it lifts more than
+            //     this, so the two never add up and a note is still never louder than its own pick.
+            if (params.levelMatch)
+            {
+                // against the mean of the smoothed and the current level: the smoothed one alone lags a decaying note
+                // by ~2 dB (300 ms), the current one alone wobbles with string beating
+                if (ph < 1.f && env[i] > 1e-9f) matchGain[i] = std::clamp(matchPeak[i] / (0.5f * (env[i] + m)), 1.f, tuning::matchMaxBoost);
+                boost = std::max(boost, 1.f + (matchGain[i] - 1.f) * ph);
             }
             if (boost > 1.f)
             {
@@ -1680,6 +1701,7 @@ private:
     std::atomic<uint32_t> noteSeqPub { 0 }, noteFramePub { 0 }, frameCountPub { 0 };
     std::array<std::atomic<float>, kVoicePub> voicePubHz {}, voicePubLevel {}, voicePubTime {}, voicePubScoop {}, voicePubVowel {};
     std::array<float, kBins> breathAcc {}, breathPh {};
+    std::array<float, kBins> matchPeak {}, matchGain {};   // level-matched swell: the pick's level, the make-up found
     std::array<float, kBins> magPrev {}, binEven {}, repickFloor {}, bodyGain {};   // last frame's magnitude (smooth re-pick), EVEN gain per note   // BREATH: amplitude collected per bin, its slowly wandering phase
     std::atomic<int> voicePubCount { 0 };
     std::atomic<float> noteAttackPub { 0.3f }, noteStrengthPub { 0.f }, frameSecPub { 0.f }, notePanPub { 0.f }, pickStrengthPub { 0.f };

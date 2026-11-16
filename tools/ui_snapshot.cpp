@@ -217,8 +217,14 @@ int main (int argc, char** argv)
     {
         pe->setUiScale (1.f);
         setParam (proc, "attack", 900.f); setParam (proc, "follow", 0.6f); setParam (proc, "mod", 0.55f); setParam (proc, "freq", 2500.f);
-        setParam (proc, "bypass", 0.f);
-        const char* ids[] = { "attack", "sustain", "touch", "follow", "feedback", "even", "pickFilter", "mod" };
+        setParam (proc, "bypass", 0.f); setParam (proc, "levelMatch", 1.f);
+        // the live view: a chord 0.7 s into a 0.9 s swell
+        setParam (proc, "holdOn", 0.f); setParam (proc, "feedback", 0.f);
+        pump (1200);
+        t = 0;
+        for (int i = 0; i < 14; ++i) { feedChord (proc, 0.05, t); pump (40); }   // audio running while the window animates
+        shoot (e, out.getChildFile ("14_live.png"));
+        const char* ids[] = { "attack", "sustain", "touch", "follow", "feedback", "even", "pickFilter", "levelMatch" };
         int n = 6;
         for (auto* id : ids)
         {
