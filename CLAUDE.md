@@ -18,8 +18,8 @@ Read it before touching `Source/dsp/SwelloEngine.h`. This file covers only what 
 
 ## What gen 2 is
 Rule for inclusion: an effect belongs only if it needs to know about individual notes.
-- **Pedal** (always visible, oxblood): signal window, ATTACK / SUSTAIN / TONE (large), FEEL (`touch`) / FEEDBACK /
-  DRY / LEVEL (`vol`) (small), a chip row (swell shape, PACE, EVEN, SYNC), footswitches ON (`bypass`) and HOLD.
+- **Pedal** (always visible, oxblood): signal window, ATTACK / SUSTAIN / TONE (large), FEEL (`touch`) / PACE (`follow`) /
+  FEEDBACK / DRY / LEVEL (`vol`, the output volume) (small), a chip row (swell shape, EVEN, SYNC), footswitches ON (`bypass`) and HOLD.
 - **Panel** (hideable; six modules, each max 4 knobs + two chip rows, each with its own muted colour):
   FILTER (teal; `filterOn`; MOD, RES, DYN, slope, BODY menu + MIX), FEEDBACK (rust; `feedbackOn`; RISE, TONE, MAX,
   harmonic, mode), MOTION (gold; `motionOn`; VIBRATO, TREMOLO, SPREAD, DETUNE + rates and modes),
@@ -51,13 +51,21 @@ Approved mockup: https://claude.ai/artifact/EZmkrUJoXqKFvVsBdjZ8Yd (oxblood fini
 - `SignalWindow`: ribbons from the engine's live output spectrum (64 log bands): a band that is a local peak draws
   a ribbon, thickness = level, pale where output exceeds input (sustain / feedback holding the note up). It stops
   repainting once everything has scrolled off.
+- Knob pictures (owner: it must be obvious what a knob does): while the mouse is over a knob or it is turned,
+  `SignalWindow::setFocus` fades the ribbons back and draws that knob's picture with a one-line caption:
+  `paintSwell` (level over 3.5 s: dashed = the guitar, amber = after the pedal; own pictures for FEEL hard/soft pick,
+  PACE slow/fast notes, EVEN, FEEDBACK overtone, DRY, LEVEL) and `paintFilter` (response over frequency, the MOD
+  sweep as dashed start -> solid end with an arrow, DYN). They use the engine's formulas; keep them in step with it.
+  `ui_snapshot` renders them (`*_view_<id>.png`) through `PolySwellEditor::showKnobView`.
+- The name plate glows (`bakeGlow`: blurred amber halos under warm-white letters) while the pedal is on; bypassed, only
+  the dim printed name shows.
 - A module that is off is darkened under its header (`paintOverChildren`); TONE shows "FILTER IS OFF".
 
 ## Not built yet (owner approved the plan, in this order)
 1. FEEDBACK rebuilt as an amp-in-the-room model: the harmonic takes over from the fundamental, a DISTANCE control
    picks which harmonic wins and lets it drift, one note wins in a chord, muting kills it. Needs a DI + amp recording
    of real feedback from the owner to tune. Today the module exposes gen 1's bloom (RISE, TONE, MAX, harmonic, mode).
-2. Per-knob curves in the window (today: name and value only).
+2. Knob pictures for the panel modules other than FILTER (HOLD, MOTION, LAYER, SPACE show name and value only).
 3. Preset browser tagged Lead / Pad / Feedback, and new factory presets for the three use cases (the list is gen 1's).
 4. LAYER characters as curated presets of the voice (today: four wave buttons + MORE).
 5. Trim the processor of parameters gen 2 never shows (only once presets no longer need them).

@@ -14,6 +14,7 @@ public:
 
     void setPanelOpen (bool open);      // show / hide the effects panel (the window gets narrower)
     void setUiScale (float scale);      // 0.75 .. 2
+    void showKnobView (const juce::String& paramId, bool on);   // as if the mouse were over that knob (ui_snapshot)
 
     static constexpr int kBaseW = 1076, kPedalOnlyW = 436, kBaseH = 720;
 

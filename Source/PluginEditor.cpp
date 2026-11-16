@@ -74,7 +74,7 @@ const char* tipFor (const String& id)
         { "smearSize", "SIZE: the reverb's length." },
         { "smearLevel", "LEVEL: how much reverb is heard (level-matched)." },
         { "smearDrive", "DRIVE: soft clipping on the reverb only." },
-        { "follow", "PACE: fast playing shortens the swell. Drag up or down." },
+        { "follow", "PACE: fast playing shortens the swell, slow playing keeps the full ATTACK." },
         { "even", "EVEN: levels soft and hard picks. Drag up or down." },
         { "vibRate", "Vibrato rate. Drag up or down." }, { "vibDelay", "Time before the vibrato starts. Drag up or down." },
         { "tremRate", "Tremolo rate. Drag up or down." }, { "detuneWobble", "Slow wobble of the detuned copy. Drag up or down." },
@@ -271,12 +271,13 @@ struct Host   // what the controls need from the board
 {
     virtual ~Host() = default;
     virtual void readout (const String& name, const String& value) = 0;
+    virtual void focus (const String& paramId, bool on) = 0;   // the window explains this knob while on
 };
 
 struct Knob : juce::Slider
 {
     Knob (PolySwellProcessor& p, Host& h, const String& paramId, const String& shownName, int kind, Colour ac)
-        : host (h), name (shownName)
+        : host (h), name (shownName), id (paramId)
     {
         setSliderStyle (kind == 3 ? juce::Slider::RotaryVerticalDrag : juce::Slider::RotaryHorizontalVerticalDrag);
         setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
@@ -291,10 +292,11 @@ struct Knob : juce::Slider
         const String unit = p.apvts.getParameter (paramId)->getLabel();
         textFromValueFunction = [base = textFromValueFunction, unit] (double v) { return tidyValue (base ? base (v) : String (v), unit); };
         onValueChange = [this] { if (isMouseOverOrDragging()) show(); repaint(); };
-        onDragStart = [this] { show(); };
+        onDragStart = [this] { show(); host.focus (id, true); };
+        onDragEnd = [this] { if (! isMouseOver()) host.focus (id, false); };
     }
-    void mouseEnter (const juce::MouseEvent& e) override { juce::Slider::mouseEnter (e); show(); repaint(); }
-    void mouseExit (const juce::MouseEvent& e) override { juce::Slider::mouseExit (e); repaint(); }
+    void mouseEnter (const juce::MouseEvent& e) override { juce::Slider::mouseEnter (e); show(); host.focus (id, true); repaint(); }
+    void mouseExit (const juce::MouseEvent& e) override { juce::Slider::mouseExit (e); if (! e.mods.isAnyMouseButtonDown()) host.focus (id, false); repaint(); }
     void show() { host.readout (name, getTextFromValue (getValue())); }
     int chipWidth()   // wide enough for the label and the longest value
     {
@@ -305,7 +307,7 @@ struct Knob : juce::Slider
     }
 
     Host& host;
-    String name;
+    String name, id;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> att;
 };
 
@@ -590,6 +592,23 @@ struct SignalWindow : juce::Component, juce::Timer
 
     void setReadout (const String& n, const String& v) { roName = n.toUpperCase(); roValue = v; roTicks = 60; }
 
+    // a knob is under the mouse or being turned: the window explains that knob until the mouse leaves
+    void setFocus (const String& id, bool on)
+    {
+        if (on) { focusId = id; focusHeld = true; }
+        else if (id == focusId) { focusHeld = false; linger = 26; }
+    }
+
+    // 1 = the swell over time, 2 = the filter over frequency, 0 = no picture (the live ribbons stay)
+    static int viewKind (const String& id)
+    {
+        for (auto* e : { "attack", "sustain", "touch", "follow", "even", "feedback", "dry", "vol", "fbRise", "sustainMax", "swellShape" }) if (id == e) return 1;
+        for (auto* f : { "freq", "mod", "res", "pickFilter", "slope" }) if (id == f) return 2;
+        return 0;
+    }
+
+    float P (const char* id) const { return proc.apvts.getRawParameterValue (id)->load(); }
+
     void timerCallback() override
     {
         float in[kB], out[kB];
@@ -614,16 +633,256 @@ struct SignalWindow : juce::Component, juce::Timer
         pick[(size_t) head] = note.seq != lastSeq;
         lastSeq = note.seq;
         head = (head + 1) % kCols;
-        if (roTicks > 0) --roTicks;
+        if (focusHeld) roTicks = 30; else if (roTicks > 0) --roTicks;
+        if (! focusHeld && linger > 0) --linger;
+        const float target = ((focusHeld || linger > 0) && viewKind (focusId) != 0) ? 1.f : 0.f;
+        const float before = viewA;
+        viewA += (target - viewA) * 0.35f;
+        if (std::abs (target - viewA) < 0.02f) viewA = target;
         const float hl = proc.holdLevelNow.load (std::memory_order_relaxed);
-        const bool byp = proc.apvts.getRawParameterValue ("bypass")->load() > 0.5f;
+        const bool byp = P ("bypass") > 0.5f;
         // nothing moving: stop repainting once the last ribbon has scrolled off
         quiet = any ? 0 : quiet + 1;
-        if (quiet < kCols + 2 || roTicks > 0 || hadReadout || hl != lastHold || byp != lastByp) repaint();
+        if (quiet < kCols + 2 || roTicks > 0 || hadReadout || hl != lastHold || byp != lastByp || viewA > 0.f || before > 0.f) repaint();
         hadReadout = roTicks > 0; lastHold = hl; lastByp = byp;
     }
 
     float bandY (int b) const { return (float) getHeight() - 22.f - (float) (b - kLoBand) / (float) (kHiBand - kLoBand) * ((float) getHeight() - 34.f); }
+
+    // ---------------------------------------------------------------- the swell picture
+    static constexpr float kT = 3.5f;                 // seconds across the picture
+    static float natural (float t) { return t < 0.f ? 0.f : std::pow (10.f, -8.f * t / 20.f); }   // a plucked note: about 8 dB/s
+    static float swellGain (float ph, bool bowed)
+    {
+        ph = juce::jlimit (0.f, 1.f, ph);
+        if (! bowed) return ph * ph;
+        return std::pow ((1.f - std::exp (-3.1f * ph)) / (1.f - std::exp (-3.1f)), 2.45f);
+    }
+    // level of one note after the pedal: its swell over `attack`, and SUSTAIN slowing the decay
+    float swelled (float t, float attack) const
+    {
+        if (t < 0.f) return 0.f;
+        const float s = P ("sustain");
+        const float rate = juce::jmin (8.f, 0.5f + 23.5f * (1.f - s) * (1.f - s));
+        const float lift = juce::jmin (P ("sustainMax") * s, (8.f - rate) * t);
+        return std::pow (10.f, (-8.f * t + lift) / 20.f) * swellGain (attack < 0.002f ? 1.f : t / attack, P ("swellShape") > 0.5f);
+    }
+
+    struct Plot { float x0, w, base, h; float x (float t) const { return x0 + w * t / kT; } float y (float a) const { return base - h * juce::jmin (a, 1.12f); } };
+
+    template <typename Fn>
+    static juce::Path curve (const Plot& pl, float from, Fn&& level)
+    {
+        juce::Path p;
+        const int n = 150;
+        bool started = false;
+        for (int i = 0; i <= n; ++i)
+        {
+            const float t = kT * (float) i / (float) n;
+            if (t < from - kT / (float) n) continue;
+            const float tt = juce::jmax (t, from);
+            if (! started) { p.startNewSubPath (pl.x (tt), pl.y (level (tt))); started = true; }
+            else p.lineTo (pl.x (tt), pl.y (level (tt)));
+        }
+        return p;
+    }
+    static void dashed (Graphics& g, const juce::Path& p, Colour c, float thickness = 1.3f)
+    {
+        juce::Path d; const float dashes[2] = { 4.f, 4.f };
+        juce::PathStrokeType (thickness).createDashedStroke (d, p, dashes, 2);
+        g.setColour (c); g.fillPath (d);
+    }
+    static void glowLine (Graphics& g, const juce::Path& p, Colour c, const Plot* fillTo = nullptr)
+    {
+        if (fillTo != nullptr && ! p.isEmpty())
+        {
+            juce::Path f (p);
+            f.lineTo (p.getBounds().getRight(), fillTo->base); f.lineTo (p.getBounds().getX(), fillTo->base); f.closeSubPath();
+            g.setGradientFill (juce::ColourGradient (c.withAlpha (0.30f), 0, fillTo->base - fillTo->h, c.withAlpha (0.03f), 0, fillTo->base, false));
+            g.fillPath (f);
+        }
+        g.setColour (c.withAlpha (0.14f)); g.strokePath (p, juce::PathStrokeType (7.f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        g.setColour (c.withAlpha (0.22f)); g.strokePath (p, juce::PathStrokeType (4.f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        g.setColour (c); g.strokePath (p, juce::PathStrokeType (1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    }
+    static void tag (Graphics& g, const String& s, float x, float y, Colour c, juce::Justification j = juce::Justification::centredLeft)
+    {
+        g.setFont (monoFont (10.5f)); g.setColour (c);
+        g.drawText (s, Rect (j == juce::Justification::centredLeft ? x : x - 120.f, y - 7.f, 120.f, 14.f), j);
+    }
+
+    String paintSwell (Graphics& g, Rect b)
+    {
+        const Colour amberC (0xffffb347), guitarC (0xffd8c3a2), paleC (0xfffff1cf);
+        const Plot pl { 16.f, b.getWidth() - 32.f, b.getHeight() - 30.f, b.getHeight() - 62.f };
+        g.setColour (Colour (0x33ff9a3a)); g.fillRect (pl.x0, pl.base, pl.w, 1.f);
+        for (int s = 1; s <= 3; ++s)
+        {
+            g.setColour (Colour (0x22ff9a3a)); g.fillRect (pl.x ((float) s), pl.base - pl.h, 1.f, pl.h + 4.f);
+            tag (g, String (s) + " s", pl.x ((float) s) + 3.f, pl.base - pl.h + 4.f, Colour (0x88e89a45));
+        }
+        const float A = P ("attack") * 0.001f;
+        const String id = focusId;
+        auto marker = [&] (float t, Colour c)
+        {
+            if (t > kT) return;
+            for (float y = pl.base - pl.h; y < pl.base; y += 5.f) { g.setColour (c.withAlpha (0.55f)); g.fillRect (pl.x (t), y, 1.f, 2.5f); }
+            juce::Path tri; tri.addTriangle (pl.x (t) - 4.f, pl.base + 6.f, pl.x (t) + 4.f, pl.base + 6.f, pl.x (t), pl.base);
+            g.setColour (c); g.fillPath (tri);
+        };
+        auto guitar = [&] (float onset, float amp) { dashed (g, curve (pl, onset, [=] (float t) { return amp * natural (t - onset); }), guitarC.withAlpha (0.55f)); };
+
+        if (id == "touch")
+        {
+            const float tch = P ("touch"), depth = P ("touchDepth");
+            guitar (0.f, 1.f);
+            if (std::abs (tch) < 0.02f)
+            {
+                glowLine (g, curve (pl, 0.f, [&] (float t) { return swelled (t, A); }), amberC, &pl);
+                marker (A, amberC);
+                return "at noon every pick swells alike";
+            }
+            const float hard = A * std::pow (2.f, -tch * depth), soft = A * std::pow (2.f, tch * depth);
+            glowLine (g, curve (pl, 0.f, [&] (float t) { return 0.75f * swelled (t, soft); }), guitarC);
+            glowLine (g, curve (pl, 0.f, [&] (float t) { return swelled (t, hard); }), amberC, &pl);
+            marker (hard, amberC); marker (soft, guitarC);
+            tag (g, "HARD PICK", pl.x (juce::jmin (hard, 2.6f)) + 5.f, pl.base - pl.h + 16.f, amberC);
+            tag (g, "SOFT PICK", pl.x (juce::jmin (soft, 2.6f)) + 5.f, pl.base - pl.h + 28.f, guitarC);
+            return tch > 0.f ? "hard picks swell faster, soft picks slower" : "soft picks swell faster, hard picks slower";
+        }
+        if (id == "follow")
+        {
+            const float f = P ("follow"), cap = 2.f + (P ("followTight") - 2.f) * f;
+            const float on[6] = { 0.f, 1.15f, 2.1f, 2.4f, 2.7f, 3.0f };
+            for (int i = 0; i < 6; ++i)
+            {
+                const float a = (i > 0 && f > 0.005f) ? juce::jmin (A, cap * (on[i] - on[i - 1])) : A;
+                const float o = on[i];
+                guitar (o, 0.8f);
+                dashed (g, curve (pl, o, [&] (float t) { return 0.8f * swelled (t - o, A); }), amberC.withAlpha (0.35f));
+                glowLine (g, curve (pl, o, [&] (float t) { return 0.8f * swelled (t - o, a); }), amberC, i == 0 ? &pl : nullptr);
+            }
+            tag (g, "SLOW NOTES", pl.x (0.05f), pl.base - pl.h + 16.f, Colour (0xcce89a45));
+            tag (g, "FAST NOTES", pl.x (2.1f), pl.base - pl.h + 16.f, Colour (0xcce89a45));
+            return f > 0.005f ? "fast playing gets a shorter swell" : "off: every note uses the full ATTACK";
+        }
+        if (id == "even")
+        {
+            const float e = P ("even");
+            const float amp[2] = { 0.42f, 1.f }, on[2] = { 0.f, 1.7f };
+            for (int i = 0; i < 2; ++i)
+            {
+                const float o = on[i], a = amp[i], lev = a + (0.72f - a) * e;
+                guitar (o, a);
+                glowLine (g, curve (pl, o, [&] (float t) { return lev * swelled (t - o, A); }), amberC, &pl);
+                tag (g, i == 0 ? "SOFT PICK" : "HARD PICK", pl.x (o) + 22.f, pl.base - pl.h + 16.f, Colour (0xcce89a45));
+            }
+            return e > 0.01f ? "soft and hard picks come out closer in level" : "off: each note keeps its own level";
+        }
+
+        // the plain swell, plus what the touched knob adds
+        guitar (0.f, 1.f);
+        tag (g, "GUITAR", pl.x (0.f) + 16.f, pl.y (0.9f), guitarC.withAlpha (0.8f));
+        const float gain = id == "vol" ? juce::Decibels::decibelsToGain (P ("vol")) : 1.f;
+        if (id == "vol") dashed (g, curve (pl, 0.f, [&] (float t) { return swelled (t, A); }), amberC.withAlpha (0.4f));
+        glowLine (g, curve (pl, 0.f, [&] (float t) { return gain * swelled (t, A); }), amberC, &pl);
+        marker (A, amberC);
+        if (id == "dry")
+        {
+            const float d = P ("dry");
+            if (d > 0.005f) glowLine (g, curve (pl, 0.f, [=] (float t) { return d * natural (t); }), paleC);
+            return d > 0.005f ? "the unswelled guitar is mixed in: the pick is heard" : "off: only the swelled sound";
+        }
+        if (id == "feedback" || id == "fbRise")
+        {
+            const float fb = P ("feedback"), rise = P ("fbRise");
+            if (fb > 0.005f)
+            {
+                auto ov = [=] (float t)
+                {
+                    const float x = juce::jlimit (0.f, 1.f, (t - A - 0.25f * rise) / (0.75f * rise));
+                    return 0.8f * fb * x * x * (3.f - 2.f * x) * std::pow (10.f, -0.6f * t / 20.f) * 0.75f;
+                };
+                glowLine (g, curve (pl, A, ov), paleC);
+                tag (g, "OVERTONE", pl.x (juce::jmin (A + rise, 2.6f)) + 4.f, pl.y (ov (juce::jmin (A + rise, 2.6f))) - 10.f, paleC);
+            }
+            return fb > 0.005f ? "a held note blooms into an overtone" : "off: no feedback";
+        }
+        if (id == "sustain" || id == "sustainMax") return P ("sustain") > 0.005f ? "the note fades more slowly than the guitar does" : "off: the note fades like the guitar";
+        if (id == "vol") return "output level (dashed: 0 dB)";
+        if (id == "swellShape") return P ("swellShape") > 0.5f ? "bowed: a slower, S-shaped start" : "classic: the pedal's curve";
+        return A < 0.002f ? "no swell: the note starts at once" : "each note fades in over this time";
+    }
+
+    // ---------------------------------------------------------------- the filter picture
+    String paintFilter (Graphics& g, Rect b)
+    {
+        const Colour teal (0xff7fd1bd), guitarC (0xffd8c3a2);
+        const float x0 = 16.f, w = b.getWidth() - 32.f, top = 30.f, bot = b.getHeight() - 30.f;
+        const float fLo = 60.f, fHi = 14000.f;
+        auto X = [&] (float f) { return x0 + w * std::log (f / fLo) / std::log (fHi / fLo); };
+        auto Y = [&] (float db) { return juce::jlimit (top - 4.f, bot, top + (bot - top) * (16.f - db) / 58.f); };
+        g.setColour (Colour (0x33ff9a3a)); g.fillRect (x0, Y (0.f), w, 1.f);
+        const std::pair<float, const char*> marks[] = { { 100.f, "100" }, { 1000.f, "1 k" }, { 10000.f, "10 k" } };
+        for (auto& m : marks)
+        {
+            g.setColour (Colour (0x22ff9a3a)); g.fillRect (X (m.first), top, 1.f, bot - top + 4.f);
+            tag (g, m.second, X (m.first) + 3.f, bot - 7.f, Colour (0x88e89a45));
+        }
+        const bool on = P ("filterOn") > 0.5f;
+        const float fc = P ("freq"), q = 0.5f * std::pow (20.f, juce::jlimit (0.f, 1.f, P ("res")));
+        const int slope = juce::roundToInt (P ("slope"));
+        auto response = [&] (float cut)
+        {
+            juce::Path p;
+            for (int i = 0; i <= 140; ++i)
+            {
+                const float f = fLo * std::pow (fHi / fLo, (float) i / 140.f), r = f / cut, r2 = r * r;
+                float h2 = slope == 0 ? 1.f / (1.f + r2) : 1.f / ((1.f - r2) * (1.f - r2) + r2 / (q * q));
+                if (slope >= 2) h2 /= (1.f + r2 * r2);
+                if (slope == 3) h2 /= (1.f + r2 * r2) * (1.f + r2 * r2);
+                const float y = Y (10.f * std::log10 (h2 + 1.0e-9f));
+                if (i == 0) p.startNewSubPath (X (f), y); else p.lineTo (X (f), y);
+            }
+            return p;
+        };
+        if (! on)
+        {
+            juce::Path flat; flat.startNewSubPath (x0, Y (0.f)); flat.lineTo (x0 + w, Y (0.f));
+            glowLine (g, flat, guitarC);
+            dashed (g, response (fc), teal.withAlpha (0.45f));
+            return "FILTER is off: nothing is cut. Switch it on in the panel";
+        }
+        const float mod = P ("mod"), oct = std::abs (mod) < 0.03f ? 0.f : std::abs (mod) * 6.f;
+        const float other = fc / std::pow (2.f, oct);      // the far end of the sweep (always below TONE)
+        const float dyn = P ("pickFilter"), dynOct = dyn * P ("pickDepth") * 0.5f;
+        if (focusId == "pickFilter" && std::abs (dyn) > 0.02f)
+        {
+            dashed (g, response (juce::jlimit (40.f, 16000.f, fc * std::pow (2.f, dynOct))), guitarC.withAlpha (0.6f));
+            dashed (g, response (juce::jlimit (40.f, 16000.f, fc * std::pow (2.f, -dynOct))), guitarC.withAlpha (0.35f));
+            tag (g, "HARD PICK", X (juce::jlimit (80.f, 5000.f, fc * std::pow (2.f, dynOct))) + 4.f, top + 20.f, guitarC.withAlpha (0.85f));
+        }
+        Plot pl { x0, w, bot, bot - top };
+        if (oct > 0.f)
+        {
+            // the cutoff travels during the swell: from the dashed curve to the solid one
+            const float from = mod > 0.f ? other : fc, to = mod > 0.f ? fc : other;
+            dashed (g, response (juce::jmax (40.f, from)), teal.withAlpha (0.6f));
+            glowLine (g, response (juce::jmax (40.f, to)), teal, &pl);
+            const float ya = top + 4.f, xa = X (juce::jmax (fLo, from)), xb = X (juce::jmax (fLo, to));
+            g.setColour (teal); g.fillRect (juce::jmin (xa, xb), ya, std::abs (xb - xa), 1.5f);
+            juce::Path head; const float d = xb > xa ? -1.f : 1.f;
+            head.addTriangle (xb, ya + 0.75f, xb + d * 7.f, ya - 3.5f, xb + d * 7.f, ya + 5.f);
+            g.fillPath (head);
+            tag (g, "START", xa + (xb > xa ? 0.f : -34.f), ya + 11.f, teal.withAlpha (0.8f));
+            if (focusId == "mod") return mod > 0.f ? "the filter opens up to TONE during the swell" : "the filter closes down from TONE during the swell";
+        }
+        else glowLine (g, response (fc), teal, &pl);
+        if (focusId == "res") return "a peak at the filter frequency";
+        if (focusId == "pickFilter") return std::abs (dyn) > 0.02f ? (dyn > 0.f ? "harder picks open the filter further" : "harder picks close the filter") : "off: picks do not move the filter";
+        if (focusId == "mod") return "noon: the filter stays where TONE puts it";
+        return "everything above this is turned down";
+    }
 
     void paint (Graphics& g) override
     {
@@ -632,13 +891,16 @@ struct SignalWindow : juce::Component, juce::Timer
         g.reduceClipRegion (clip);
         g.setGradientFill (juce::ColourGradient (Colour (0xff3a1a08), b.getCentreX(), b.getHeight() * 0.55f, Colour (0xff0c0503), 0.f, 0.f, true));
         g.fillAll();
-        g.setColour (Colour (0x1aff9a3a));
-        for (int i = 1; i < 4; ++i) g.fillRect (std::floor (b.getWidth() * (float) i / 4.f), 0.f, 1.f, b.getHeight());
-        for (int i = 1; i < 5; ++i) g.fillRect (0.f, std::floor (b.getHeight() * (float) i / 5.f), b.getWidth(), 1.f);
 
         const float hl = lastHold;
         if (hl > 0.f) { g.setColour (Colour (0xffffb347).withAlpha (0.07f * hl)); g.fillAll(); }
 
+        // ---- live ribbons (they step back while a knob is being explained)
+        const float live = 1.f - 0.88f * viewA;
+        g.beginTransparencyLayer (live);
+        g.setColour (Colour (0x1aff9a3a));
+        for (int i = 1; i < 4; ++i) g.fillRect (std::floor (b.getWidth() * (float) i / 4.f), 0.f, 1.f, b.getHeight());
+        for (int i = 1; i < 5; ++i) g.fillRect (0.f, std::floor (b.getHeight() * (float) i / 5.f), b.getWidth(), 1.f);
         const float dx = b.getWidth() / (float) (kCols - 1);
         g.setColour (Colour (0x26ffc777));
         for (int i = 0; i < kCols; ++i)
@@ -678,24 +940,40 @@ struct SignalWindow : juce::Component, juce::Timer
                 }
             }
         }
+        g.endTransparencyLayer();
 
-        g.setFont (monoFont (11.5f));
-        if (roTicks > 0)
+        // ---- the picture of the knob under the mouse
+        const int kind = viewKind (focusId);
+        if (viewA > 0.01f && kind != 0)
         {
+            g.beginTransparencyLayer (viewA);
+            const String says = kind == 1 ? paintSwell (g, b) : paintFilter (g, b);
+            g.setFont (monoFont (13.f));
+            g.setColour (kind == 2 ? Colour (0xff9fe3d2) : Colour (0xffffc777));
+            g.drawText (roName + "  " + roValue, b.reduced (12, 7), juce::Justification::topLeft);
+            g.setFont (uiFont (12.f, false, 0.03f));
+            g.setColour (Colour (0xffe9c79a));
+            g.drawText (says, b.reduced (12, 5), juce::Justification::bottomRight);
+            g.endTransparencyLayer();
+        }
+        else if (roTicks > 0)
+        {
+            g.setFont (monoFont (11.5f));
             g.setColour (Colour (0xffe89a45).withAlpha (juce::jmin (1.f, (float) roTicks / 10.f)));
             g.drawText (roName + "  " + roValue, b.reduced (10, 5), juce::Justification::bottomLeft);
         }
-        if (lastByp) { g.setColour (Colour (0xffe89a45)); g.drawText ("BYPASSED", b.reduced (10, 5), juce::Justification::bottomRight); }
-        else if (hl > 0.f) { g.setColour (Colour (0xfffff1cf).withAlpha (0.4f + 0.6f * hl)); g.drawText ("HOLD", b.reduced (10, 5), juce::Justification::bottomRight); }
+        g.setFont (monoFont (11.5f));
+        if (lastByp) { g.setColour (Colour (0xffe89a45)); g.drawText ("BYPASSED", b.reduced (10, 7), juce::Justification::topRight); }
+        else if (hl > 0.f) { g.setColour (Colour (0xfffff1cf).withAlpha (0.4f + 0.6f * hl)); g.drawText ("HOLD", b.reduced (10, 7), juce::Justification::topRight); }
 
         // glass: a soft reflection and darker edges
         g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.13f), 0.f, 0.f, juce::Colours::transparentWhite, b.getWidth() * 0.5f, b.getHeight() * 0.9f, false));
         g.fillAll();
-        const float e = 20.f;
-        g.setGradientFill (juce::ColourGradient (juce::Colours::black.withAlpha (0.7f), 0, 0, juce::Colours::transparentBlack, 0, e, false)); g.fillRect (0.f, 0.f, b.getWidth(), e);
-        g.setGradientFill (juce::ColourGradient (juce::Colours::black.withAlpha (0.7f), 0, b.getHeight(), juce::Colours::transparentBlack, 0, b.getHeight() - e, false)); g.fillRect (0.f, b.getHeight() - e, b.getWidth(), e);
-        g.setGradientFill (juce::ColourGradient (juce::Colours::black.withAlpha (0.7f), 0, 0, juce::Colours::transparentBlack, e, 0, false)); g.fillRect (0.f, 0.f, e, b.getHeight());
-        g.setGradientFill (juce::ColourGradient (juce::Colours::black.withAlpha (0.7f), b.getWidth(), 0, juce::Colours::transparentBlack, b.getWidth() - e, 0, false)); g.fillRect (b.getWidth() - e, 0.f, e, b.getHeight());
+        const float e = 14.f;
+        g.setGradientFill (juce::ColourGradient (juce::Colours::black.withAlpha (0.6f), 0, 0, juce::Colours::transparentBlack, 0, e, false)); g.fillRect (0.f, 0.f, b.getWidth(), e);
+        g.setGradientFill (juce::ColourGradient (juce::Colours::black.withAlpha (0.6f), 0, b.getHeight(), juce::Colours::transparentBlack, 0, b.getHeight() - e, false)); g.fillRect (0.f, b.getHeight() - e, b.getWidth(), e);
+        g.setGradientFill (juce::ColourGradient (juce::Colours::black.withAlpha (0.6f), 0, 0, juce::Colours::transparentBlack, e, 0, false)); g.fillRect (0.f, 0.f, e, b.getHeight());
+        g.setGradientFill (juce::ColourGradient (juce::Colours::black.withAlpha (0.6f), b.getWidth(), 0, juce::Colours::transparentBlack, b.getWidth() - e, 0, false)); g.fillRect (b.getWidth() - e, 0.f, e, b.getHeight());
         if (lastByp) { g.setColour (juce::Colours::black.withAlpha (0.45f)); g.fillAll(); }
     }
 
@@ -703,11 +981,11 @@ struct SignalWindow : juce::Component, juce::Timer
     std::array<std::array<float, kB>, kCols> thick {}, hot {};
     std::array<bool, kCols> pick {};
     std::array<float, kB> sm {};
-    int head = 0, idle = 0, quiet = 0, roTicks = 0;
+    int head = 0, idle = 0, quiet = 0, roTicks = 0, linger = 0;
     uint32_t lastFrame = 0, lastSeq = 0;
-    float lastHold = 0.f;
-    bool lastByp = false, hadReadout = false;
-    String roName, roValue;
+    float lastHold = 0.f, viewA = 0.f;
+    bool lastByp = false, hadReadout = false, focusHeld = false;
+    String roName, roValue, focusId;
 };
 } // namespace
 
@@ -731,6 +1009,11 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
 
     // ---- Host
     void readout (const String& name, const String& value) override { window.setReadout (name, value); }
+    void focus (const String& paramId, bool on) override { window.setFocus (paramId, on); }
+    void showKnobView (const String& paramId, bool on)   // for tools/ui_snapshot
+    {
+        for (auto* k : knobs) if (k->id == paramId) { k->show(); window.setFocus (paramId, on); }
+    }
 
     void setParam (const char* id, float plain)
     {
@@ -833,9 +1116,9 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
             knob (bid[i], bn[i], 0, px + bx[i], py + 283, col::amber, g);
             label (bn[i], { px + bx[i] - 60, py + 333, 120, 16 }, 13.5f, col::ink, juce::Justification::centred, true, 0.18f);
         }
-        const float sx[4] = { 68.5f, 153.5f, 238.5f, 323.5f };
-        const char* sid[4] = { "touch", "feedback", "dry", "vol" }; const char* sn[4] = { "FEEL", "FEEDBACK", "DRY", "LEVEL" };
-        for (int i = 0; i < 4; ++i)
+        const float sx[5] = { 56.f, 126.f, 196.f, 266.f, 336.f };
+        const char* sid[5] = { "touch", "follow", "feedback", "dry", "vol" }; const char* sn[5] = { "FEEL", "PACE", "FEEDBACK", "DRY", "LEVEL" };
+        for (int i = 0; i < 5; ++i)
         {
             knob (sid[i], sn[i], 1, px + sx[i], py + 392, col::amber, g);
             label (sn[i], { px + sx[i] - 45, py + 425, 90, 14 }, 11.5f, col::ink2, juce::Justification::centred, true, 0.16f);
@@ -843,7 +1126,6 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
 
         // the swell's own options, in one row under the window
         auto* shape = chip (Chip::menu, "swellShape", "", col::amber, "Swell shape: Classic (the pedal's curve) or Bowed (a slower, S-shaped start).", g);
-        auto* pace = valueChip ("follow", "PACE", 84, col::amber, g);
         auto* even = valueChip ("even", "EVEN", 84, col::amber, g);
         auto* sync = chip (Chip::custom, "", "SYNC", col::amber, "Tempo sync: ATTACK becomes a note length of the host tempo.", g);
         sync->textFn = [this] { return getParam ("sync") > 0.5f ? "SYNC " + proc.apvts.getParameter ("syncDiv")->getCurrentValueAsText() : String ("SYNC OFF"); };
@@ -863,8 +1145,8 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
                 sync->repaint();
             });
         };
-        const float total = (float) (shape->getWidth() + pace->getWidth() + even->getWidth() + sync->getWidth()) + 18.f;
-        flow ({ shape, pace, even, sync }, px + (kPedalW - total) * 0.5f, py + 197);
+        const float total = (float) (shape->getWidth() + even->getWidth() + sync->getWidth()) + 16.f;
+        flow ({ shape, even, sync }, px + (kPedalW - total) * 0.5f, py + 197, 8.f);
 
         addAndMakeVisible (onLed); addAndMakeVisible (holdLed);
         onLed.setBounds (juce::roundToInt (px + 108 - 14), juce::roundToInt (py + 533), 28, 22);
@@ -1121,6 +1403,7 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         int mask = 0;
         for (int i = 0; i < 6; ++i) if (kMods[i].onId != nullptr && getParam (kMods[i].onId) < 0.5f) mask |= 1 << i;
         if (getParam ("filterOn") < 0.5f) mask |= 64;
+        if (getParam ("bypass") > 0.5f) mask |= 128;      // bypassed: the name goes dark
         if (mask != offMask) { offMask = mask; repaint(); }
         for (auto* c : chips) if (c->textFn || c->litFn) c->repaint();
     }
@@ -1192,10 +1475,8 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         g.setColour (col::ink);
         g.setFont (uiFont (11.5f, true, 0.5f));
         g.drawText ("BENNO", Rect (pr.getX(), pr.getY() + 452, pr.getWidth(), 14).translated (3, 0), juce::Justification::centred);
-        g.setFont (juce::Font (juce::FontOptions ("Georgia", 46.f, juce::Font::bold | juce::Font::italic)));
-        g.drawText ("Polyswell", Rect (pr.getX(), pr.getY() + 462, pr.getWidth() - 46, 52), juce::Justification::centred);
-        g.setFont (juce::Font (juce::FontOptions ("Georgia", 27.f, juce::Font::bold | juce::Font::italic)));
-        g.drawText ("II", Rect (pr.getX() + 285, pr.getY() + 474, 50, 36), juce::Justification::centredLeft);
+        g.setColour (col::ink.withAlpha (0.5f));      // unlit: printed on the enclosure; the lit version is drawn over it
+        drawWordmark (g);
         g.setColour (col::ink2);
         g.setFont (uiFont (10.5f, false, 0.3f));
         g.drawText ("POLYPHONIC SWELL AND SUSTAIN", Rect (pr.getX(), pr.getY() + 512, pr.getWidth(), 13).translated (2, 0), juce::Justification::centred);
@@ -1242,12 +1523,55 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         }
     }
 
+    static void drawWordmark (Graphics& g)
+    {
+        const Rect pr (kPedalX, kPedalY, kPedalW, kPedalH);
+        g.setFont (juce::Font (juce::FontOptions ("Georgia", 46.f, juce::Font::bold | juce::Font::italic)));
+        g.drawText ("Polyswell", Rect (pr.getX(), pr.getY() + 462, pr.getWidth() - 46, 52), juce::Justification::centred);
+        g.setFont (juce::Font (juce::FontOptions ("Georgia", 27.f, juce::Font::bold | juce::Font::italic)));
+        g.drawText ("II", Rect (pr.getX() + 285, pr.getY() + 474, 50, 36), juce::Justification::centredLeft);
+    }
+
+    // the name lit from within: a wide and a tight amber halo under warm-white letters (shown while the pedal is on)
+    static Rect glowRect() { return { kPedalX, kPedalY + 440, kPedalW, 96 }; }
+    void bakeGlow (float ps)
+    {
+        const auto gr = glowRect();
+        const int w = juce::jmax (1, juce::roundToInt (gr.getWidth() * ps)), h = juce::jmax (1, juce::roundToInt (gr.getHeight() * ps));
+        auto text = [&] (Colour c)
+        {
+            juce::Image img (juce::Image::ARGB, w, h, true);
+            Graphics g (img);
+            g.addTransform (juce::AffineTransform::translation (-gr.getX(), -gr.getY()).scaled (ps));
+            g.setColour (c);
+            drawWordmark (g);
+            return img;
+        };
+        auto blurred = [&] (const juce::Image& src, float radius)
+        {
+            const int r = juce::jmax (1, juce::roundToInt (radius * ps));
+            juce::ImageConvolutionKernel k (2 * r + 1);
+            k.createGaussianBlur ((float) r * 0.5f);
+            juce::Image out (juce::Image::ARGB, w, h, true);
+            k.applyToImage (out, src, out.getBounds());
+            return out;
+        };
+        const auto halo = text (Colour (0xffff9a2e));
+        glow = juce::Image (juce::Image::ARGB, w, h, true);
+        Graphics g (glow);
+        const auto wide = blurred (halo, 11.f), tight = blurred (halo, 4.f);
+        g.setOpacity (0.85f); g.drawImageAt (wide, 0, 0); g.drawImageAt (wide, 0, 0);
+        g.setOpacity (1.f); g.drawImageAt (tight, 0, 0); g.drawImageAt (tight, 0, 0);
+        g.drawImageAt (text (Colour (0xfffff3d6)), 0, 0);
+    }
+
     void paint (Graphics& g) override
     {
         const float ps = g.getInternalContext().getPhysicalPixelScaleFactor();
-        if (! bg.isValid() || std::abs (ps - bakedScale) > 0.001f) bake (ps);
+        if (! bg.isValid() || std::abs (ps - bakedScale) > 0.001f) { bake (ps); bakeGlow (ps); }
         g.setImageResamplingQuality (Graphics::highResamplingQuality);
         g.drawImage (bg, getLocalBounds().toFloat());
+        if (! (offMask & 128)) g.drawImage (glow, glowRect());
     }
 
     void paintOverChildren (Graphics& g) override
@@ -1293,7 +1617,7 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
     std::array<juce::ValueTree, 2> abState;
     int abSlot = 0, offMask = 0;
     bool panelOpen = true;
-    juce::Image bg, grain;
+    juce::Image bg, grain, glow;
     float bakedScale = 0.f;
 };
 
@@ -1328,6 +1652,8 @@ void PolySwellEditor::setPanelOpen (bool open)
     applySize();
     board->setPanelVisible (open);
 }
+
+void PolySwellEditor::showKnobView (const juce::String& paramId, bool on) { board->showKnobView (paramId, on); }
 
 void PolySwellEditor::setUiScale (float scale)
 {

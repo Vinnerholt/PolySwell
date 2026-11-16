@@ -212,6 +212,22 @@ int main (int argc, char** argv)
     pump (300);
     shoot (e, out.getChildFile ("5_size_150.png"));
 
+    // the window explaining a knob (as when the mouse is over it)
+    if (pe != nullptr)
+    {
+        pe->setUiScale (1.f);
+        setParam (proc, "attack", 900.f); setParam (proc, "follow", 0.6f); setParam (proc, "mod", 0.55f); setParam (proc, "freq", 2500.f);
+        setParam (proc, "bypass", 0.f);
+        const char* ids[] = { "attack", "sustain", "touch", "follow", "feedback", "even", "pickFilter", "mod" };
+        int n = 6;
+        for (auto* id : ids)
+        {
+            pe->showKnobView (id, true); pump (500);
+            shoot (e, out.getChildFile (juce::String (n++) + "_view_" + id + ".png"));
+            pe->showKnobView (id, false);
+        }
+    }
+
     ed.reset();
     proc.releaseResources();
     return 0;
