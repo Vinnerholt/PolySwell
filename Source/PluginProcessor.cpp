@@ -43,6 +43,31 @@ namespace
     };
     constexpr int kNumPresets = (int) (sizeof (kPresets) / sizeof (kPresets[0]));
 
+    // PolySwell II presets for its three uses. Each starts from Init and sets only what is listed.
+    struct NewPreset { const char* name; const char* tag; std::vector<std::pair<const char*, float>> set; };
+    const std::vector<NewPreset>& newPresets()
+    {
+        static const std::vector<NewPreset> p {
+            { "Singing lead", "Lead", { { "attack", 180 }, { "sustain", 0.6f }, { "levelMatch", 1 }, { "smoothRepick", 1 }, { "touch", 0.3f }, { "follow", 0.4f },
+                                        { "feedback", 0.3f }, { "fbDistance", 0.3f }, { "fbRise", 1.6f }, { "vibDepth", 10 }, { "vibDelay", 0.35f }, { "vibTarget", 2 }, { "vibHuman", 1 } } },
+            { "Violin lead", "Lead", { { "attack", 350 }, { "swellShape", 1 }, { "levelMatch", 1 }, { "smoothRepick", 1 }, { "even", 0.4f }, { "sustain", 0.4f },
+                                       { "filterOn", 1 }, { "freq", 6000 }, { "mod", 0.15f }, { "slope", 0 }, { "bowedBody", 1 },
+                                       { "vibDepth", 14 }, { "vibDelay", 0.35f }, { "vibRate", 5 }, { "vibTarget", 2 }, { "vibHuman", 1 } } },
+            { "Slow bloom lead", "Lead", { { "attack", 600 }, { "sustain", 0.7f }, { "levelMatch", 1 }, { "follow", 0.5f }, { "feedback", 0.5f }, { "fbDistance", 0.28f },
+                                           { "fbRise", 1.2f }, { "smearOn", 1 }, { "smearLevel", 0.3f }, { "smearSize", 0.45f }, { "smearSend", 1 } } },
+            { "Warm pad", "Pad", { { "attack", 1200 }, { "sustain", 0.8f }, { "levelMatch", 1 }, { "filterOn", 1 }, { "freq", 1800 }, { "mod", 0.4f }, { "res", 0.15f }, { "slope", 2 },
+                                   { "spread", 0.6f }, { "detune", 10 }, { "detuneWobble", 0.3f }, { "smearOn", 1 }, { "smearSize", 0.7f }, { "smearLevel", 0.5f }, { "smearSend", 1 }, { "holdFade", 1.2f } } },
+            { "Glass pad", "Pad", { { "attack", 900 }, { "sustain", 0.6f }, { "levelMatch", 1 }, { "voiceMix", 0.4f }, { "voiceWave", 5 }, { "voiceOct", 2 }, { "voiceTone", 5000 },
+                                    { "voiceUnison", 0.3f }, { "spread", 0.5f }, { "smearOn", 1 }, { "smearSize", 0.65f }, { "smearLevel", 0.45f }, { "holdFade", 1.0f } } },
+            { "Frozen strings", "Pad", { { "attack", 1500 }, { "swellShape", 1 }, { "sustain", 0.7f }, { "levelMatch", 1 }, { "voiceMix", 0.35f }, { "voiceWave", 1 }, { "voiceTone", 4000 },
+                                         { "voiceCharacter", 0.5f }, { "detune", 7 }, { "smearOn", 1 }, { "smearSize", 0.8f }, { "smearLevel", 0.5f }, { "smearDark", 1 }, { "holdFade", 1.5f } } },
+            { "Amp in the room", "Feedback", { { "attack", 80 }, { "sustain", 0.5f }, { "feedback", 0.8f }, { "fbDistance", 0.3f }, { "fbRise", 1.2f }, { "fbTone", 1600 }, { "dry", 0.3f } } },
+            { "Octave scream", "Feedback", { { "attack", 30 }, { "sustain", 0.4f }, { "feedback", 1.0f }, { "fbDistance", 0.27f }, { "fbRise", 0.6f }, { "fbTone", 2500 }, { "dry", 0.5f } } },
+            { "Slow howl", "Feedback", { { "attack", 400 }, { "sustain", 0.7f }, { "levelMatch", 1 }, { "feedback", 0.7f }, { "fbDistance", 0.55f }, { "fbRise", 2.5f }, { "fbTone", 1300 },
+                                         { "smearOn", 1 }, { "smearSize", 0.6f }, { "smearLevel", 0.35f } } } };
+        return p;
+    }
+
     // VOICE / VIBRATO part of each preset (same order as kPresets)
     struct VoicePreset { float mix; int wave, oct; float tone, unison, drift, detune; int chorus; float stab, vib, vibDelay; int vibTarget; };
     const VoicePreset kVoicePresets[] =
@@ -243,6 +268,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout PolySwellProcessor::createLa
     l.add (std::make_unique<juce::AudioParameterChoice> (PID { "swellShape", 1 }, "Swell Shape", juce::StringArray { "Classic", "Bowed" }, 0));
     l.add (std::make_unique<juce::AudioParameterBool> (PID { "smoothRepick", 1 }, "Smooth Re-pick", false));
     l.add (std::make_unique<juce::AudioParameterBool> (PID { "levelMatch", 1 }, "Level-matched Swell", false));
+    // FEEDBACK amp model (PolySwell II)
+    l.add (std::make_unique<juce::AudioParameterBool> (PID { "fbAmp", 1 }, "Feedback Amp Model", true));
+    l.add (std::make_unique<APF> (PID { "fbDistance", 1 }, "Feedback Distance", juce::NormalisableRange<float> (0.f, 1.f, 0.001f), 0.3f));
+    l.add (std::make_unique<juce::AudioParameterBool> (PID { "fbOneWins", 1 }, "Feedback One Note Wins", true));
     l.add (std::make_unique<APF> (PID { "even", 1 }, "Even", juce::NormalisableRange<float> (0.f, 1.f, 0.001f), 0.f));
     l.add (std::make_unique<juce::AudioParameterBool> (PID { "bowedBody", 1 }, "Bowed Body", false));
     l.add (std::make_unique<juce::AudioParameterChoice> (PID { "bodyIr", 1 }, "Body IR",
@@ -334,6 +363,8 @@ PolySwellProcessor::PolySwellProcessor()
                         .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, &undo, "STATE", createLayout())
 {
+    for (auto& m : ccMap) m = -1;
+    for (auto* prm : getParameters()) if (auto* r = dynamic_cast<juce::RangedAudioParameter*> (prm)) ccParams.add (r);
     pHoldOn = apvts.getRawParameterValue ("holdOn"); pHoldFade = apvts.getRawParameterValue ("holdFade"); pHoldLevel = apvts.getRawParameterValue ("holdLevel");
     pVol     = apvts.getRawParameterValue ("vol");
     pAttack  = apvts.getRawParameterValue ("attack");
@@ -483,6 +514,13 @@ void PolySwellProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
 {
     juce::ScopedNoDenormals noDenormals;
 
+    // MIDI in: learned CCs move parameters (the buffer is cleared further down; only tracked notes go out)
+    for (const auto meta : midiOut)
+    {
+        const auto msg = meta.getMessage();
+        if (msg.isController()) handleCc (msg.getControllerNumber(), msg.getControllerValue());
+    }
+
     // host tempo (120 BPM if unknown), for SYNC and tremolo sync
     double bpm = 120.0;
     if (auto* ph = getPlayHead())
@@ -571,6 +609,10 @@ void PolySwellProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     p.swellShape    = (int) std::lround (pSwellShape->load());
     p.smoothRepick  = pSmoothRepick->load() > 0.5f;
     p.levelMatch    = apvts.getRawParameterValue ("levelMatch")->load() > 0.5f;
+    p.fbAmp         = apvts.getRawParameterValue ("fbAmp")->load() > 0.5f;
+    p.fbDistance    = apvts.getRawParameterValue ("fbDistance")->load();
+    p.fbOneWins     = apvts.getRawParameterValue ("fbOneWins")->load() > 0.5f;
+    p.uiTrack       = editorOpen.load (std::memory_order_relaxed);
     p.even          = pEven->load();
     p.bowedBody     = pBowedBody->load() > 0.5f;
 
@@ -630,7 +672,7 @@ void PolySwellProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     const int numOut = juce::jmin (getTotalNumOutputChannels(), buffer.getNumChannels());
     const int n      = buffer.getNumSamples();
 
-    midiOut.clear();   // nothing comes in; the tracked notes go out (MIDI OUT)
+    midiOut.clear();   // what came in was read above; the tracked notes go out (MIDI OUT)
     const bool llNow = lowLatencyActive.load();
     const uint64_t blockStart = llNow ? engineLL.samplesProcessed() : engine.samplesProcessed();
     float keyPeak = 0.f;
@@ -800,8 +842,74 @@ void PolySwellProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
 }
 
 // ---------------------------------------------------------------- presets
-int PolySwellProcessor::getNumPrograms() { return kNumPresets; }
-const juce::String PolySwellProcessor::getProgramName (int i) { return kPresets[juce::jlimit (0, kNumPresets - 1, i)].name; }
+int PolySwellProcessor::getNumPrograms() { return kNumPresets + (int) newPresets().size(); }
+const juce::String PolySwellProcessor::getProgramName (int i)
+{
+    i = juce::jlimit (0, getNumPrograms() - 1, i);
+    return i < kNumPresets ? kPresets[i].name : newPresets()[(size_t) (i - kNumPresets)].name;
+}
+juce::String PolySwellProcessor::programTag (int i)
+{
+    return i < kNumPresets ? "Classic" : newPresets()[(size_t) juce::jlimit (0, (int) newPresets().size() - 1, i - kNumPresets)].tag;
+}
+
+// a PolySwell II preset: Init, the gen-2 controls at rest, then what the preset lists
+void PolySwellProcessor::applyNewPreset (int index)
+{
+    const auto& np = newPresets()[(size_t) index];
+    setCurrentProgram (0);
+    for (auto& kv : np.set) setParam (kv.first, kv.second);
+    currentProgram = kNumPresets + index;
+    currentPresetName = np.name;
+}
+
+// ---------------------------------------------------------------- MIDI learn
+void PolySwellProcessor::learnCc (const juce::String& id)
+{
+    for (int i = 0; i < ccParams.size(); ++i) if (ccParams[i]->getParameterID() == id) { ccLearn = i; return; }
+}
+void PolySwellProcessor::forgetCc (const juce::String& id)
+{
+    for (int c = 0; c < 128; ++c) { const int i = ccMap[(size_t) c].load(); if (i >= 0 && ccParams[i]->getParameterID() == id) ccMap[(size_t) c] = -1; }
+    if (isLearning (id)) ccLearn = -1;
+}
+int PolySwellProcessor::ccFor (const juce::String& id) const
+{
+    for (int c = 0; c < 128; ++c) { const int i = ccMap[(size_t) c].load(); if (i >= 0 && ccParams[i]->getParameterID() == id) return c; }
+    return -1;
+}
+bool PolySwellProcessor::isLearning (const juce::String& id) const
+{
+    const int i = ccLearn.load();
+    return i >= 0 && ccParams[i]->getParameterID() == id;
+}
+
+// audio thread. Knobs follow the CC; ON and (latched) HOLD flip when a footswitch is pressed; other switches follow it.
+void PolySwellProcessor::handleCc (int cc, int value)
+{
+    if (cc < 0 || cc > 127) return;
+    const int learn = ccLearn.load();
+    if (learn >= 0)
+    {
+        for (auto& m : ccMap) if (m.load() == learn) m = -1;
+        ccMap[(size_t) cc] = learn; ccLearn = -1; ccLast[(size_t) cc] = value;
+        return;
+    }
+    const int idx = ccMap[(size_t) cc].load();
+    const int last = ccLast[(size_t) cc];
+    ccLast[(size_t) cc] = value;
+    if (idx < 0) return;
+    auto* prm = ccParams[idx];
+    const auto id = prm->getParameterID();
+    const bool pressed = value >= 64 && last < 64;
+    if (dynamic_cast<juce::AudioParameterBool*> (prm) != nullptr)
+    {
+        const bool flips = id == "bypass" || (id == "holdOn" && apvts.getRawParameterValue ("holdLatch")->load() > 0.5f);
+        if (flips) { if (pressed) prm->setValueNotifyingHost (prm->getValue() > 0.5f ? 0.f : 1.f); }
+        else prm->setValueNotifyingHost (value >= 64 ? 1.f : 0.f);
+    }
+    else prm->setValueNotifyingHost ((float) value / 127.f);
+}
 
 void PolySwellProcessor::setParam (const char* id, float v)
 {
@@ -815,7 +923,13 @@ void PolySwellProcessor::setParam (const char* id, float v)
 
 void PolySwellProcessor::setCurrentProgram (int i)
 {
-    i = juce::jlimit (0, kNumPresets - 1, i);
+    i = juce::jlimit (0, getNumPrograms() - 1, i);
+    if (i >= kNumPresets) { applyNewPreset (i - kNumPresets); return; }
+    // the PolySwell II controls at rest (the classic presets were made before they existed)
+    for (auto id : { "levelMatch", "holdOn", "smearDark", "smearGate", "smearSend", "even" }) setParam (id, 0.f);
+    setParam ("fbAmp", 1.f); setParam ("fbDistance", 0.3f); setParam ("fbOneWins", 1.f); setParam ("fbRise", 1.2f); setParam ("fbTone", 1100.f);
+    setParam ("smearLevel", 0.5f); setParam ("smearSize", 0.5f); setParam ("holdFade", 0.6f); setParam ("holdLevel", 0.8f);
+    setParam ("vibRate", 5.5f); setParam ("vibHuman", 0.f);
     currentProgram = i;
     const auto& p = kPresets[i];
     setParam ("vol", p.vol);       setParam ("attack", p.attack);   setParam ("freq", p.freq);
@@ -933,6 +1047,9 @@ void PolySwellProcessor::getStateInformation (juce::MemoryBlock& dest)
     state.setProperty ("userPreset", userPresetLoaded, nullptr);
     state.setProperty ("uiPedalsOpen", uiPedalsOpen, nullptr);
     state.setProperty ("uiScale", uiScale, nullptr);
+    juce::StringArray ccs;
+    for (int c = 0; c < 128; ++c) if (const int k = ccMap[(size_t) c].load(); k >= 0) ccs.add (juce::String (c) + ":" + ccParams[k]->getParameterID());
+    state.setProperty ("ccMap", ccs.joinIntoString (","), nullptr);
     for (int i = 0; i < 3; ++i)
     {
         state.setProperty ("uiFold" + juce::String (i), uiFold[(size_t) i], nullptr);
@@ -950,10 +1067,17 @@ void PolySwellProcessor::setStateInformation (const void* data, int size)
         if (xml->hasTagName (apvts.state.getType()))
         {
             auto vt = juce::ValueTree::fromXml (*xml);
-            currentProgram = juce::jlimit (0, kNumPresets - 1, (int) vt.getProperty ("program", 0));
+            currentProgram = juce::jlimit (0, getNumPrograms() - 1, (int) vt.getProperty ("program", 0));
             if (const auto ir = vt.getProperty ("customIr", "").toString(); ir.isNotEmpty()) customIr = juce::File (ir);
             uiVoiceMore = (bool) vt.getProperty ("uiVoiceMore", false);
-            currentPresetName = vt.getProperty ("presetName", kPresets[currentProgram].name).toString();
+            currentPresetName = vt.getProperty ("presetName", getProgramName (currentProgram)).toString();
+            for (auto& m : ccMap) m = -1;
+            for (auto pair : juce::StringArray::fromTokens (vt.getProperty ("ccMap", "").toString(), ",", ""))
+            {
+                const int cc = pair.upToFirstOccurrenceOf (":", false, false).getIntValue();
+                const auto id = pair.fromFirstOccurrenceOf (":", false, false);
+                for (int k = 0; k < ccParams.size(); ++k) if (cc >= 0 && cc < 128 && ccParams[k]->getParameterID() == id) ccMap[(size_t) cc] = k;
+            }
             userPresetLoaded = (bool) vt.getProperty ("userPreset", false);
             uiPedalsOpen = (bool) vt.getProperty ("uiPedalsOpen", true);
             uiScale = juce::jlimit (0.75f, 2.f, (float) (double) vt.getProperty ("uiScale", 1.0));

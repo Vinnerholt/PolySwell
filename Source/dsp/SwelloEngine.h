@@ -77,6 +77,10 @@ namespace tuning
     constexpr float fbMaxSourceHz     = 3000.f;  // partials above this never feed back
     constexpr float fbHoldDbPerSec    = 0.5f;    // a feeding-back note decays at most this fast
     constexpr float fbMaxBoostDb      = 24.0f;
+    constexpr float fbTakeover        = 0.65f;   // amp model: at full bloom the note itself drops to 35 %, its harmonic takes over
+    constexpr float fbDrift           = 0.06f;   // amp model: DISTANCE wanders by +-this (the player never stands still)
+    constexpr float fbWinPower        = 1.5f;    // amp model, one note wins: share = (partial / loudest)^this
+    constexpr float fbMuteRatio       = 0.25f;   // amp model: a partial 12 dB under its own smoothed level was muted -> feedback dies
     constexpr float fbLevel           = 0.8f;    // full bloom: overtone at about -2 dB of the note
     constexpr int   fbKernelHalf      = 3;       // bins either side of a resynthesised overtone
 
@@ -153,6 +157,10 @@ struct Params
     float chordGroupMs  = 60.0f;  // onsets within this of the previous one are one note (strum)
     float pickFilter    = 0.0f;   // -1 .. 1: + = harder picks open the filter further, - = harder picks are darker
     float sustainMaxDb  = 24.0f;  // SUSTAIN = 1: largest make-up gain
+    bool  fbAmp         = false;  // amp-in-the-room model: DISTANCE picks the harmonic, it takes over, one note wins
+    float fbDistance    = 0.3f;   // 0..1 along the ladder note / octave / 12th / 2 octaves / 2 octaves + third
+    bool  fbOneWins     = true;   // the loudest partial takes most of the feedback
+    bool  uiTrack       = false;  // keep tracking the played notes for the editor's window (no sound)
     int   fbHarmonic    = 0;      // 0: octave, 1: octave + fifth (12th), 2: unison (the note itself), 3: sub-octave
     float fbRiseSec     = 1.2f;   // how long a held note takes to bloom fully
     float fbToneHz      = 1100.f; // overtones above this are rolled off (purer, more sine-like)
@@ -392,7 +400,7 @@ public:
     {
         inRing.fill(0.f);  outRing.fill(0.f);
         ref.fill(0.f);     refRaw.fill(0.f);  hold.fill(0.f);
-        matchPeak.fill(0.f); matchGain.fill(1.f);
+        matchPeak.fill(0.f); matchGain.fill(1.f); fbDuck.fill(1.f); fbDriftNow = fbDriftTarget = 0.f; fbDriftCount = 0;
         phase.fill(0.f);   gain.fill(0.f);    env.fill(0.f);   attackMul.fill(1.f); binStrength.fill(0.f); binEven.fill(1.f); magPrev.fill(0.f);
         active.fill(false); quiet.fill(0);
         fbAmt.fill(0.f);   fbHold.fill(0.f);  prevArg.fill(0.f);  subPhPrev.fill(0.f); subPhCur.fill(0.f);
@@ -660,7 +668,8 @@ private:
         if (fbOn || voiceOn) updateInstFreq();                 // true frequency of every bin (phase vocoder)
         // polyphonic pitch (long window) every ~20 ms, and on the next frames after a pick (faster new notes);
         // the analysis itself runs on the half hop (processStereo)
-        const bool trackNeeded = voiceOn || pitchSpread || params.midiOut > 0;
+        const bool trackNeeded = voiceOn || pitchSpread || params.midiOut > 0 || params.uiTrack;
+        if (fbOn) updateFbModel();
         if (trackNeeded && (frameCount % (uint32_t) trackerEvery == 0u || fastAnalyses > 0))
         {
             trackerDue = true;
@@ -792,6 +801,8 @@ private:
             if (fbOn)
             {
                 if (active[i] && ph >= 1.f) fbAmt[i] = std::min(1.f, fbAmt[i] + fbRiseInc);   // blooms on held notes
+                // amp model: a muted string stops feeding back at once (and starts over if it is let ring again)
+                if (params.fbAmp && fbAmt[i] > 0.f && m < tuning::fbMuteRatio * env[i]) { fbAmt[i] = 0.f; fbHold[i] = m; }
                 fbHold[i] = std::max(env[i], fbHold[i] * fbHoldDecay);
                 const float b = params.fbMode == 1 ? 0.f : fbBloom(i);   // a harmonizer doesn't hold the note
                 if (b > 0.f && env[i] > 1e-9f)
@@ -808,6 +819,7 @@ private:
                 if (ph < 1.f && env[i] > 1e-9f) matchGain[i] = std::clamp(matchPeak[i] / (0.5f * (env[i] + m)), 1.f, tuning::matchMaxBoost);
                 boost = std::max(boost, 1.f + (matchGain[i] - 1.f) * ph);
             }
+            fbDuck[i] = (fbOn && fbTakeover > 0.f) ? 1.f - fbTakeover * fbBloom(i) : 1.f;
             if (boost > 1.f)
             {
                 const float gate = std::clamp((env[i] - tuning::sustainFloor) / (3.f * tuning::sustainFloor), 0.f, 1.f);
@@ -815,6 +827,7 @@ private:
             }
             // 3b) per-note tremolo: this note's own LFO, starting at full level at its pick
             if (tremOn) g *= 1.f - params.tremDepth * tremLfo(noteTime[i]);
+            g *= fbDuck[i];      // amp model: the note makes room for its fed-back harmonic
             gain[i] = g;
 
             // 4) per-note low-pass: cutoff follows THIS bin's own swell position
@@ -852,7 +865,7 @@ private:
             if (voiceOn) synthVoice(invQ, true);
             else voicePubCount.store(0, std::memory_order_relaxed);
         }
-        if (! voiceOn && params.midiOut > 0) synthVoice(invQ, false);   // MIDI only: track the notes, no sound
+        if (! voiceOn && (params.midiOut > 0 || params.uiTrack)) synthVoice(invQ, false);   // MIDI only: track the notes, no sound
         else if (! voiceOn && heldN > 0) allMidiOff();
 
         // SPREAD: per-bin equal-power pan (unity in the centre); the difference R - L goes to its own ring
@@ -947,16 +960,55 @@ private:
     // (phase-vocoder estimate), resynthesised as a sinusoid with the window's exact spectral shape. Its
     // phase is ratio x the partial's own phase, so it is locked to the note frame after frame (like the
     // harmonic an amp adds). Scaled by the bloom, held up like the note, rolled off above fbToneHz.
+    // FEEDBACK, amp model (PolySwell II, fbAmp): where the guitar stands decides which harmonic of a held note the
+    // amp picks up. DISTANCE walks a ladder: the note itself, its octave, the 12th, two octaves, two octaves + a third;
+    // mostly it sits on one of them and crosses over between two. It also wanders a little by itself, as a player never
+    // stands still. Called once per frame.
+    void updateFbModel()
+    {
+        fbRatioA = fbRatioB = 0.f; fbWeightA = 1.f; fbWeightB = 0.f; fbTakeover = 0.f;
+        if (! params.fbAmp || params.fbMode == 1) return;
+        if (--fbDriftCount <= 0)
+        {
+            fbRng = fbRng * 1664525u + 1013904223u;
+            fbDriftTarget = ((float) (fbRng >> 8) * (1.f / 16777216.f) - 0.5f) * 2.f * tuning::fbDrift;
+            fbDriftCount = (int) ((0.8f + 1.2f * (float) ((fbRng >> 4) & 255u) / 255.f) / std::max(frameSec, 1e-4f));
+        }
+        fbDriftNow += (fbDriftTarget - fbDriftNow) * std::min(1.f, frameSec / 0.6f);
+        static const float ladder[5] = { 1.f, 2.f, 3.f, 4.f, 5.f };
+        const float pos = std::clamp(params.fbDistance + fbDriftNow, 0.f, 1.f) * 4.f;
+        const int ia = std::min(3, (int) pos);
+        const float x = std::clamp((pos - (float) ia - 0.3f) / 0.4f, 0.f, 1.f), w = x * x * (3.f - 2.f * x);
+        fbRatioA = ladder[ia]; fbRatioB = ladder[ia + 1]; fbWeightA = 1.f - w; fbWeightB = w;
+        // the fed-back harmonic takes over from the note (not when the "harmonic" is the note itself)
+        fbTakeover = tuning::fbTakeover * ((ia == 0 ? 0.f : fbWeightA) + fbWeightB);
+    }
+
+    // FEEDBACK: every held partial (spectral peak) gets an overtone at ratio x its true frequency
+    // (phase-vocoder estimate), resynthesised as a sinusoid with the window's exact spectral shape. Its
+    // phase is ratio x the partial's own phase, so it is locked to the note frame after frame (like the
+    // harmonic an amp adds). Scaled by the bloom, held up like the note, rolled off above fbToneHz.
     void addFeedback()
     {
+        const bool  amp      = params.fbAmp && params.fbMode != 1;
         const float ratio    = params.fbHarmonic == 1 ? 3.f : params.fbHarmonic == 2 ? 1.f
                              : params.fbHarmonic == 3 ? 0.5f : 2.f;
-        const bool  sub      = ratio < 1.f;   // a phase can't be halved: the sub-octave keeps its own running phase
+        const bool  sub      = ! amp && ratio < 1.f;   // a phase can't be halved: the sub-octave keeps its own running phase
         if (sub) subPhCur.fill(0.f);
         const float binHz    = (float) sampleRate / (float) kFftSize;
         const float expected = 2.f * kPi * (float) kHop / (float) kFftSize;   // phase advance per bin index
         const int   maxK     = std::min(kBins - 2, (int) (tuning::fbMaxSourceHz / binHz));
         const float fbMaxBoost = std::pow(10.0f, params.sustainMaxDb / 20.0f);
+
+        // amp model, "one note wins": the loudest blooming partial takes most of the feedback, as in a real amp
+        float strongest = 0.f;
+        if (amp && params.fbOneWins)
+            for (int k = 2; k <= maxK; ++k)
+            {
+                const size_t i = (size_t) k;
+                if (mag[i] < tuning::fbPeakMin || mag[i] <= mag[i - 1] || mag[i] < mag[i + 1]) continue;
+                strongest = std::max(strongest, mag[i] * fbBloom(i));
+            }
 
         for (int k = 2; k <= maxK; ++k)
         {
@@ -965,36 +1017,43 @@ private:
             if (m < tuning::fbPeakMin || m <= mag[i - 1] || m < mag[i + 1]) continue;   // spectral peak only
             const float b = fbBloom(i);
             if (b <= 0.001f) continue;
+            const float win = strongest > 0.f ? std::pow(std::min(1.f, m * b / strongest), tuning::fbWinPower) : 1.f;
 
             const float kTrue = std::clamp(instBin[i], (float) k - 1.f, (float) k + 1.f);
-            const float kOut  = ratio * kTrue;
-            if (kOut + (float) tuning::fbKernelHalf >= (float) (kBins - 1) || kOut < 1.5f) continue;
-
             // the partial as a sinusoid: amplitude and phase at the frame start
             const Cpx   kIn  = kernel((float) k - kTrue);
             const float kInM = std::max(std::abs(kIn), 1e-6f);
             const float A    = 2.f * std::abs(inSpec[i]) / kInM;
             const float th   = std::arg(inSpec[i]) - std::arg(kIn);
-
-            const float tone = 1.f / std::sqrt(1.f + std::pow(kOut * binHz / std::max(params.fbToneHz, 100.f), 4.f));
             const float held = (params.fbMode == 1 || env[i] <= 1e-9f) ? 1.f : std::min(fbHold[i] / env[i], fbMaxBoost);
-            // harmonizer: the copy follows the note's own swell/tremolo; bloom: the swell is long done, and
-            // the note's gain already carries the feedback hold (using it here would apply the hold twice)
-            const float Aout = tuning::fbLevel * b * tone * held * A * (params.fbMode == 1 ? gain[i] : 1.f);
-            float outPhase = wrapPi(ratio * th);
-            if (sub)
-            {
-                // continue this partial's sub-octave phase from the last frame (look one bin either side)
-                float prev = subPhPrev[i];
-                if (prev == 0.f) prev = subPhPrev[i - 1] != 0.f ? subPhPrev[i - 1] : subPhPrev[i + 1];
-                outPhase = wrapPi(prev + expected * kOut);
-                for (int d = -1; d <= 1; ++d) subPhCur[(size_t) (k + d)] = outPhase == 0.f ? 1e-6f : outPhase;
-            }
-            const Cpx   ph   = std::polar(0.5f * Aout, outPhase);
 
-            const int j0 = (int) std::floor(kOut) - tuning::fbKernelHalf + 1;
-            for (int j = j0; j < j0 + 2 * tuning::fbKernelHalf; ++j)
-                if (j >= 1) spec[(size_t) j] += ph * kernel((float) j - kOut);
+            for (int pass = 0; pass < (amp ? 2 : 1); ++pass)
+            {
+                const float r     = amp ? (pass == 0 ? fbRatioA : fbRatioB) : ratio;
+                const float share = amp ? (pass == 0 ? fbWeightA : fbWeightB) * win : 1.f;
+                if (share < 0.01f) continue;
+                if (amp && r == 1.f) continue;      // the note itself: its hold boost is the feedback, nothing to add
+                const float kOut  = r * kTrue;
+                if (kOut + (float) tuning::fbKernelHalf >= (float) (kBins - 1) || kOut < 1.5f) continue;
+                const float tone = 1.f / std::sqrt(1.f + std::pow(kOut * binHz / std::max(params.fbToneHz, 100.f), 4.f));
+                // harmonizer: the copy follows the note's own swell/tremolo; bloom: the swell is long done, and
+                // the note's gain already carries the feedback hold (using it here would apply the hold twice)
+                const float Aout = tuning::fbLevel * b * tone * held * A * share * (params.fbMode == 1 ? gain[i] : 1.f);
+                float outPhase = wrapPi(r * th);
+                if (sub)
+                {
+                    // continue this partial's sub-octave phase from the last frame (look one bin either side)
+                    float prev = subPhPrev[i];
+                    if (prev == 0.f) prev = subPhPrev[i - 1] != 0.f ? subPhPrev[i - 1] : subPhPrev[i + 1];
+                    outPhase = wrapPi(prev + expected * kOut);
+                    for (int d = -1; d <= 1; ++d) subPhCur[(size_t) (k + d)] = outPhase == 0.f ? 1e-6f : outPhase;
+                }
+                const Cpx   ph   = std::polar(0.5f * Aout, outPhase);
+
+                const int j0 = (int) std::floor(kOut) - tuning::fbKernelHalf + 1;
+                for (int j = j0; j < j0 + 2 * tuning::fbKernelHalf; ++j)
+                    if (j >= 1) spec[(size_t) j] += ph * kernel((float) j - kOut);
+            }
         }
         if (sub) std::swap(subPhPrev, subPhCur);
     }
@@ -1701,6 +1760,9 @@ private:
     std::atomic<uint32_t> noteSeqPub { 0 }, noteFramePub { 0 }, frameCountPub { 0 };
     std::array<std::atomic<float>, kVoicePub> voicePubHz {}, voicePubLevel {}, voicePubTime {}, voicePubScoop {}, voicePubVowel {};
     std::array<float, kBins> breathAcc {}, breathPh {};
+    std::array<float, kBins> fbDuck {};
+    float fbRatioA = 0.f, fbRatioB = 0.f, fbWeightA = 1.f, fbWeightB = 0.f, fbTakeover = 0.f, fbDriftNow = 0.f, fbDriftTarget = 0.f;
+    int fbDriftCount = 0; uint32_t fbRng = 0x2468aceu;
     std::array<float, kBins> matchPeak {}, matchGain {};   // level-matched swell: the pick's level, the make-up found
     std::array<float, kBins> magPrev {}, binEven {}, repickFloor {}, bodyGain {};   // last frame's magnitude (smooth re-pick), EVEN gain per note   // BREATH: amplitude collected per bin, its slowly wandering phase
     std::atomic<int> voicePubCount { 0 };

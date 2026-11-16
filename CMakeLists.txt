@@ -19,7 +19,7 @@ juce_add_plugin(PolySwell
     PRODUCT_NAME "PolySwell II"
     VST3_CATEGORIES Fx
     IS_SYNTH FALSE
-    NEEDS_MIDI_INPUT FALSE
+    NEEDS_MIDI_INPUT TRUE    # learned MIDI CCs (footswitch -> HOLD / ON, expression pedal -> a knob)
     NEEDS_MIDI_OUTPUT TRUE   # MIDI out of the tracked notes (Reaper / Cantabile route it; see CLAUDE.md for Cubase)
     IS_MIDI_EFFECT FALSE
     COPY_PLUGIN_AFTER_BUILD FALSE)

@@ -1372,6 +1372,37 @@ int main()
         check(std::abs(sOn - sOff) < 0.5, "MATCH leaves a note that does not decay alone");
     }
 
+    std::printf("Test 35: feedback, amp model (DISTANCE picks the harmonic, it takes over, one note wins, muting kills it)\n");
+    {
+        const int n = at(4.0);
+        std::vector<float> one((size_t) n), two((size_t) n), muted((size_t) n);
+        for (int i = 0; i < n; ++i)
+        {
+            const double t = (double) i / kSr, d = std::pow(10.0, -6.0 * t / 20.0);
+            one[(size_t) i] = (float) (0.25 * d * std::sin(2 * kPi * 220.0 * t));
+            two[(size_t) i] = (float) (0.25 * d * std::sin(2 * kPi * 220.0 * t) + 0.10 * d * std::sin(2 * kPi * 311.1 * t));
+            muted[(size_t) i] = t < 2.5 ? one[(size_t) i] : 0.f;
+        }
+        const int lat = kLatencySamples, w = 4800;
+        auto P = [](float distance, bool amp, bool wins) { Params p; p.attackMs = 100.f; p.feedback = 1.f; p.fbRiseSec = 1.0f; p.fbAmp = amp; p.fbDistance = distance; p.fbOneWins = wins; return p; };
+        const Out classic = run(one, P(0.25f, false, true)), oct = run(one, P(0.25f, true, true)), twelfth = run(one, P(0.5f, true, true));
+        const double cF = amp(classic.wet, at(3.0) + lat, w, 220.0), aF = amp(oct.wet, at(3.0) + lat, w, 220.0), aO = amp(oct.wet, at(3.0) + lat, w, 440.0);
+        const double t12 = amp(twelfth.wet, at(3.0) + lat, w, 660.0), tO = amp(twelfth.wet, at(3.0) + lat, w, 440.0);
+        std::printf("  DISTANCE .25: 220 Hz %.4f (classic %.4f), 440 Hz %.4f | DISTANCE .5: 660 Hz %.4f, 440 Hz %.4f\n", aF, cF, aO, t12, tO);
+        check(aO > 1.2 * aF && aF < 0.6 * cF, "the octave takes over from the note");
+        check(t12 > 5.0 * tO, "further away the 12th wins instead of the octave");
+        const Out all = run(two, P(0.25f, true, false)), win = run(two, P(0.25f, true, true));
+        const double allR = amp(all.wet, at(3.0) + lat, w, 622.2) / amp(all.wet, at(3.0) + lat, w, 440.0);
+        const double winR = amp(win.wet, at(3.0) + lat, w, 622.2) / amp(win.wet, at(3.0) + lat, w, 440.0);
+        std::printf("  two notes: quiet note's overtone / loud note's overtone %.2f, with ONE WINS %.2f\n", allR, winR);
+        check(winR < 0.6 * allR, "one note wins: the quieter note's feedback is held back");
+        const Out mu = run(muted, P(0.25f, true, true));
+        double e = 0; for (int i = at(2.75) + lat; i < at(3.25) + lat; ++i) e += (double) mu.wet[(size_t) i] * mu.wet[(size_t) i];
+        const double rms = std::sqrt(e / (double) at(0.5));
+        std::printf("  muted at 2.5 s: level 0.25..0.75 s later %.5f\n", rms);
+        check(rms < 0.002, "muting the string kills the feedback");
+    }
+
     std::printf("%s\n", failures ? "SOME TESTS FAILED" : "ALL TESTS PASSED");
     return failures ? 1 : 0;
 }

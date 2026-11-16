@@ -25,7 +25,7 @@ public:
     bool hasEditor() const override { return true; }
 
     const juce::String getName() const override { return "PolySwell II"; }
-    bool acceptsMidi() const override { return false; }
+    bool acceptsMidi() const override { return true; }     // MIDI CC in: learned controls (see learn)
     bool producesMidi() const override { return true; }    // MIDI out of the tracked notes (midiOut)
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 0.0; }
@@ -94,6 +94,14 @@ public:
 
     // editor layout, remembered with the session (effect pedals slid out, folded pedals, open rows)
     bool uiPedalsOpen = true;
+    std::atomic<bool> editorOpen { false };  // the window wants the played notes tracked
+    static juce::String programTag (int index);   // "Lead" / "Pad" / "Feedback" / "Classic"
+
+    // MIDI learn: a CC moves a parameter (footswitch -> HOLD / ON, expression pedal -> ATTACK ...). Message thread API:
+    void learnCc (const juce::String& paramId);            // the next CC that arrives is bound to this parameter
+    void forgetCc (const juce::String& paramId);
+    int  ccFor (const juce::String& paramId) const;        // -1 = none
+    bool isLearning (const juce::String& paramId) const;
     float uiScale = 1.f;                    // editor size (0.75 .. 2)
     std::atomic<float> holdLevelNow { 0.f };   // HOLD pad fade 0..1 (for the UI)
     std::array<bool, 5> uiFold { false, false, false, false, false };   // BLOOM, MOTION, VOICE, SMEAR, DRIVE
@@ -113,6 +121,12 @@ private:
     swello::Limiter limiter;
     swello::VoiceFx voiceFx;                // unison / drift / chorus / phaser on the voice only
     swello::Smear smear;                    // SMEAR: gated reverb + drive, after the swell and the voice
+    juce::Array<juce::RangedAudioParameter*> ccParams;      // every parameter, by index
+    std::array<std::atomic<int>, 128> ccMap;                 // CC number -> index into ccParams (-1 none)
+    std::array<int, 128> ccLast {};
+    std::atomic<int> ccLearn { -1 };
+    void handleCc (int cc, int value);
+    void applyNewPreset (int index);
     swello::Hold hold;                      // HOLD: spectral freeze of what is ringing, added after SMEAR
     std::atomic<float> *pHoldOn = nullptr, *pHoldFade = nullptr, *pHoldLevel = nullptr;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> holdLevelSmooth;
