@@ -1492,13 +1492,15 @@ struct SignalWindow : juce::Component, juce::Timer
 
     void paintLive (Graphics& g, Rect b)
     {
-        const Rect lane (8.f, 14.f, b.getWidth() - 16.f, 76.f), env (8.f, 96.f, b.getWidth() - 16.f, 22.f);
+        // one plot over the whole glass: the swell (output against the guitar) in front, the notes faint behind it
+        const Rect lane (8.f, 13.f, b.getWidth() - 16.f, b.getHeight() - 32.f), env = lane;
         const float nowX = std::round (b.getWidth() * kNowFrac), dx = (nowX - lane.getX()) / (float) (kCols - 1);
         auto X = [&] (int age) { return nowX - (float) age * dx; };
         const int fut = (int) ((lane.getRight() - nowX) / dx);
         const Colour amberC (cAmber), pale (cPale), teal (0xff7fd1bd), rust (0xffff8a6a), blue (0xff8fb8e8), violet (0xffc4a6ec),
                      sage (0xffb5d38c), cream (0xffd8c3a2);
 
+        g.beginTransparencyLayer (0.3f);   // ---- background: the notes, their pitch, the filter veil
         // the open E strings as a faint grid
         g.setFont (monoFont (9.5f));
         for (int m : { 40, 52, 64, 76 })
@@ -1525,10 +1527,6 @@ struct SignalWindow : juce::Component, juce::Timer
             };
             for (int age = kCols - 1; age >= 0; --age) if (col (age).cut > 0.f) veil (X (age) - dx * 0.5f, dx + 0.6f, col (age).cut, 0.5f);
             for (int k = 1; k <= fut; ++k) veil (nowX + ((float) k - 0.5f) * dx, dx + 0.6f, cutoffAt (noteAge >= 0.f ? noteAge + (float) k * kColSec : -1.f), 0.32f);
-            const float cNow = cutoffAt (noteAge), yc = yOfHz (cNow, lane);
-            juce::Path tri; tri.addTriangle (lane.getRight(), yc - 4.f, lane.getRight(), yc + 4.f, lane.getRight() - 6.f, yc);
-            g.setColour (teal.withAlpha (0.8f)); g.fillPath (tri);
-            tag (g, tidyValue (String (cNow), "Hz").toUpperCase(), lane.getRight() - 8.f, juce::jmax (yc - 8.f, lane.getY() + 9.f), teal.withAlpha (0.8f), juce::Justification::centredRight);
         }
 
         // the notes
@@ -1609,39 +1607,55 @@ struct SignalWindow : juce::Component, juce::Timer
             }
         }
 
+        g.endTransparencyLayer();   // ---- foreground
+
+        if (filterOn)   // where the filter is now, on the pitch axis at the right edge
+        {
+            const float cNow = cutoffAt (noteAge), yc = yOfHz (cNow, lane);
+            juce::Path tri; tri.addTriangle (lane.getRight(), yc - 4.f, lane.getRight(), yc + 4.f, lane.getRight() - 6.f, yc);
+            g.setColour (teal.withAlpha (0.8f)); g.fillPath (tri);
+            tag (g, tidyValue (String (cNow), "Hz").toUpperCase(), lane.getRight() - 8.f, juce::jmax (yc - 8.f, lane.getY() + 9.f), teal.withAlpha (0.8f), juce::Justification::centredRight);
+        }
+
         // "now"
         for (float y = lane.getY() - 4.f; y < env.getBottom(); y += 5.f) { g.setColour (cTextHi.withAlpha (0x40 / 255.f)); g.fillRect (nowX, y, 1.f, 2.5f); }
 
         // the output level against the guitar's own; the latest note's swell continues dashed past "now"
         auto yDb = [&] (float db) { return env.getBottom() - juce::jlimit (0.f, 1.f, (db + 60.f) / 54.f) * env.getHeight(); };
         g.setColour (cGlow.withAlpha (0x1a / 255.f)); g.fillRect (env.getX(), env.getBottom(), env.getWidth(), 1.f);
-        juce::Path outP, inP;
+        juce::Path outP, outL, inP;
         for (int age = kCols - 1; age >= 0; --age)
         {
             const Col& c = col (age);
-            if (age == kCols - 1) { outP.startNewSubPath (X (age), env.getBottom()); inP.startNewSubPath (X (age), yDb (c.inDb)); }
-            else inP.lineTo (X (age), yDb (c.inDb));
+            if (age == kCols - 1) { outP.startNewSubPath (X (age), env.getBottom()); inP.startNewSubPath (X (age), yDb (c.inDb)); outL.startNewSubPath (X (age), yDb (c.outDb)); }
+            else { inP.lineTo (X (age), yDb (c.inDb)); outL.lineTo (X (age), yDb (c.outDb)); }
             outP.lineTo (X (age), yDb (c.outDb));
         }
         outP.lineTo (nowX, env.getBottom()); outP.closeSubPath();
-        g.setGradientFill (juce::ColourGradient (amberC.withAlpha (0.55f), 0.f, env.getY(), amberC.withAlpha (0.06f), 0.f, env.getBottom(), false));
+        g.setGradientFill (juce::ColourGradient (amberC.withAlpha (0.5f), 0.f, env.getY(), amberC.withAlpha (0.04f), 0.f, env.getBottom(), false));
         g.fillPath (outP);
-        dashed (g, inP, cream.withAlpha (0.6f), 1.f);
-        if (noteAge >= 0.f && noteAge < kT && inPeakNote > 1.0e-5f)
+        g.setColour (cGlow.withAlpha (0.35f)); g.strokePath (outL, juce::PathStrokeType (4.f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        g.setColour (amberC); g.strokePath (outL, juce::PathStrokeType (1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        dashed (g, inP, cream.withAlpha (0.65f), 1.2f);
         {
-            const float A = noteAttack > 0.f ? noteAttack : P ("attack") * 0.001f;
+            // the swell ahead: the latest note's, or a preview of the next one (a pick at -12 dB) so ATTACK always shows
+            const bool live = noteAge >= 0.f && noteAge < kT && inPeakNote > 1.0e-5f;
+            const float A = live && noteAttack > 0.f ? noteAttack : P ("attack") * 0.001f, t0 = live ? noteAge : 0.f;
+            const float pk = live ? inPeakNote : 0.25f;
             juce::Path pr;
             for (int k = 0; k <= fut; ++k)
             {
-                const float t = noteAge + (float) k * kColSec, y = yDb (20.f * std::log10 (inPeakNote * swelled (t, A) + 1.0e-9f));
+                const float t = t0 + (float) k * kColSec, y = yDb (20.f * std::log10 (pk * swelled (t, A) + 1.0e-9f));
                 if (k == 0) pr.startNewSubPath (nowX, y); else pr.lineTo (nowX + (float) k * dx, y);
             }
-            dashed (g, pr, amberC.withAlpha (0.85f), 1.3f);
+            if (! live) { g.setColour (cGlow.withAlpha (0.25f)); g.strokePath (pr, juce::PathStrokeType (4.f)); }
+            dashed (g, pr, amberC.withAlpha (live ? 0.9f : 0.6f), 2.f);
+            if (! live) tag (g, "NEXT NOTE", nowX + 6.f, env.getBottom() - 8.f, amberC.withAlpha (0.55f));
         }
         for (int age = 0; age < kCols; ++age)
             if (col (age).pick) { g.setColour (amberC.withAlpha (0.8f)); g.fillRect (X (age), env.getBottom() - 4.f, 1.f, 5.f); }
-        tag (g, "OUT", env.getX() + 2.f, env.getY() + 3.f, amberC.withAlpha (0.85f));
-        tag (g, "GUITAR", env.getX() + 28.f, env.getY() + 3.f, cream.withAlpha (0.75f));
+        tag (g, "OUT", env.getX() + 2.f, env.getY() + 4.f, amberC.withAlpha (0.9f));
+        tag (g, "GUITAR", env.getX() + 28.f, env.getY() + 4.f, cream.withAlpha (0.75f));
 
         // what is shaping the sound: lit when in use
         struct Item { const char* s; Colour c; bool lit; };
@@ -1958,12 +1972,12 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         // laid out inside the plate's printed frame (x 20..373, y 14..625), as in the approved mockup
         // row 1: how the notes swell in, how long they ring, the tone
         const float bx[3] = { 84.f, 196.f, 308.f };
-        const int bsz[3] = { 119, 100, 119 };
+        const int bsz[3] = { 119, 84, 119 };   // ATTACK and TONE are the main knobs
         const char* bid[3] = { "attack", "sustain", "freq" }; const char* bn[3] = { "ATTACK", "SUSTAIN", "TONE" };
         for (int i = 0; i < 3; ++i)
         {
             knob (bid[i], bn[i], 0, px + bx[i], py + 252, col::amber, g, bsz[i]);
-            label (bn[i], { px + bx[i] - 60, py + (i == 1 ? 293.f : 303.f), 120, 16 }, i == 1 ? 12.f : 13.f, col::ink, juce::Justification::centred, true, 0.18f);
+            label (bn[i], { px + bx[i] - 60, py + (i == 1 ? 282.f : 303.f), 120, 16 }, i == 1 ? 10.5f : 13.f, col::ink, juce::Justification::centred, true, 0.18f);
         }
         // row 2 in two printed groups: how the swell follows your playing | what comes out
         struct Grp { const char* title; float x, w; std::vector<std::pair<const char*, const char*>> ks; std::vector<float> xs; };
@@ -1982,14 +1996,14 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
 
         // the ON footswitch, centred, its LED to the left
         addAndMakeVisible (onLed);
-        onLed.setBounds (juce::roundToInt (px + 128 - 18), juce::roundToInt (py + 566 - 18), 36, 36);   // room for the glow
+        onLed.setBounds (juce::roundToInt (px + 128 - 18), juce::roundToInt (py + 574 - 18), 36, 36);   // room for the glow
         onLed.pedalSkin = &currentSkin;
         addAndMakeVisible (onSw);
-        onSw.setBounds (juce::roundToInt (px + 196 - 36), juce::roundToInt (py + 578 - 36), 72, 72);
+        onSw.setBounds (juce::roundToInt (px + 196 - 36), juce::roundToInt (py + 584 - 36), 72, 72);
         onSw.setTooltip ("ON: switches the pedal in or out (bypass). Right-click: MIDI learn (a footswitch on your controller).");
         onSw.onMenu = [this] { midiMenu ("bypass", onSw); };
         onSw.onDown = [this] { setParam ("bypass", getParam ("bypass") > 0.5f ? 0.f : 1.f); };
-        label ("ON", { px + 128 - 20, py + 584, 40, 14 }, 12.f, col::ink, juce::Justification::centred, true, 0.18f);
+        label ("ON", { px + 128 - 20, py + 592, 40, 14 }, 12.f, col::ink, juce::Justification::centred, true, 0.18f);
     }
 
     // ---- panel
@@ -2382,7 +2396,15 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         }
         {
             const auto logo = sk.logoImg();   // visible part: x 8..1006, y 8..359 of 1012 x 440
-            const float lw = 236.f, lh = lw * 351.f / 998.f, ly = pr.getY() + (412.f + 548.f) * 0.5f - lh * 0.5f;
+            const float lw = 300.f, lh = lw * 351.f / 998.f, lcy = pr.getY() + (412.f + 552.f) * 0.5f, ly = lcy - lh * 0.5f;
+            // 70s racing stripes in the skin's three colours, frame to frame, running under the lettering through the
+            // lower part of the oval (text: 24..70 % of the logo's height, oval to 100 %); the plate's wear shows through
+            const float sy = ly + lh * 0.855f - 11.f;
+            for (int k = 0; k < 3; ++k)
+            {
+                const Rect st (pr.getX() + 24.f, sy + (float) k * 8.5f, kPedalW - 48.f, 5.5f);
+                g.setColour (sk.rings[k].withAlpha (0.88f)); g.fillRect (st);
+            }
             g.drawImage (logo, juce::roundToInt (pr.getCentreX() - lw * 0.5f), juce::roundToInt (ly), juce::roundToInt (lw), juce::roundToInt (lh),
                          8, 8, 998, 351);
         }

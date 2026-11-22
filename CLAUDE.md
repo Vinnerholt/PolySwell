@@ -178,3 +178,9 @@ rings (outer = lightest). Switch: SKIN chip in the top bar or gear > Skin; saved
 - The pedal's drop shadow is clipped outside the plate: JUCE 8's Direct2D renderer drew it over the plate (cream -> grey).
 - Release: GitHub repo https://github.com/Vinnerholt/PolySwell, `.github/workflows/build.yml` (Windows + macOS, release
   on a `v*` tag), `pages.yml` (site/ -> GitHub Pages), AGPLv3.
+- Pedal: SUSTAIN 84 px (ATTACK / TONE 119 are the main knobs); logo 300 wide over three racing stripes in the skin's
+  colours (frame to frame, under the lettering through the oval's lower part); ON lower.
+- Window live view (owner: the swell matters more than which notes): one plot over the whole glass. In front: output
+  level (filled, bright edge) against the guitar (dashed), the latest note's swell projected past "now", or with nothing
+  playing a "NEXT NOTE" preview (a -12 dB pick through the current settings) so ATTACK always shows. Behind, in a 30 %
+  transparency layer: the note ribbons, the pitch grid and the filter veil; the filter's Hz marker stays bright.
