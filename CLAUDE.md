@@ -232,3 +232,6 @@ rings (outer = lightest). Switch: SKIN chip in the top bar or gear > Skin; saved
 ## TODO (owner)
 - Pass through all ten presets by ear: after the POG2 gain removal and MATCH-by-default, most ATTACK times (and some
   LEVELs) probably need adjusting.
+- 2.0.1: Lagoon and Midnight logos recoloured from the Sunburst logo with Sunburst's soft steps mapped to light blue
+  (212 deg) -> indigo (242 deg) (no turquoise); their rings/stripes #699bd6 / #5466ce / #4435c0, Lagoon's window blue,
+  Midnight navy knobs with cream pointers.
