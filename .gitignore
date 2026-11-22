@@ -4,3 +4,5 @@ build/
 .vs/
 PolySwell/
 shots/
+measurements/*.wav
+measurements/pog2/

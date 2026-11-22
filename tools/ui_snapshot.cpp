@@ -224,7 +224,7 @@ int main (int argc, char** argv)
         t = 0;
         for (int i = 0; i < 14; ++i) { feedChord (proc, 0.05, t); pump (40); }   // audio running while the window animates
         shoot (e, out.getChildFile ("14_live.png"));
-        const char* ids[] = { "attack", "sustain", "touch", "follow", "feedback", "even", "pickFilter", "levelMatch" };
+        const char* ids[] = { "attack", "sustain", "touch", "follow", "feedback", "fbDistance", "vibDepth", "spread", "voiceMix", "holdFade", "smearSize", "levelMatch" };
         int n = 6;
         for (auto* id : ids)
         {

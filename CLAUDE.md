@@ -84,3 +84,27 @@ Approved mockup: https://claude.ai/artifact/EZmkrUJoXqKFvVsBdjZ8Yd (oxblood fini
 - No feature may add latency to the main path without a switch. Keep CPU low (owner runs amp sims).
 - Keep tests green and add a test for every new DSP behaviour.
 - Commit messages end with the Co-Authored-By trailer Claude Code uses by default.
+
+## Round 3 (2026-11-22)
+- FEEDBACK amp model (`fbAmp` on by default, `fbDistance`, `fbOneWins`; engine `updateFbModel` + `addFeedback`, test 35),
+  built without a recording: DISTANCE walks a ladder note / octave / 12th / 2 oct / 2 oct + third (crossfading between
+  rungs, +-0.06 slow drift); at full bloom the note drops to 35 % (`fbDuck`) while the harmonic takes over; ONE WINS gives
+  each partial (level x bloom / loudest)^1.5 of the feedback; a partial 12 dB under its smoothed level (muted) resets
+  its bloom. `fbHarmonic` is only used with AMP off. Tune against a real DI + amp recording when there is one.
+- MIDI learn: right-click a knob or footswitch. CC in (`acceptsMidi`, NEEDS_MIDI_INPUT); `handleCc` on the audio
+  thread: knobs follow, ON and latched HOLD flip on a press, other switches follow the pedal. Saved as `ccMap` in the
+  state. Settings menu lists them.
+- Presets: 9 PolySwell II presets (`newPresets()`: 3 Lead, 3 Pad, 3 Feedback) after the 18 classic ones;
+  `programTag()`; the preset menu groups by tag and the LCD shows it. Classic presets reset the gen-2 controls.
+- Pedal: ATTACK and TONE large, SUSTAIN medium (100 px); small knobs in printed groups PLAYING (FEEL, PACE),
+  AMP (FEEDBACK), OUTPUT (DRY, LEVEL). Ticks only on the big knobs; round hit areas; double-click resets.
+- Module header icons (`drawModIcon`); EFFECTS pull-out tab on the pedal's right edge (`DrawerTab`, dots = modules in use).
+- Window live view (owner: wanted one ribbon per played note): `SignalWindow` keeps 105 columns (3.5 s) of the tracked
+  notes (`readVoiceNotes`; the engine now tracks while the editor is open, `editorOpen` -> `Params::uiTrack`, and
+  publishes notes without the voice sounding). Pitch lane 72 Hz..1.5 kHz: ribbons (thickness = level, pale = held up
+  above the guitar), named at "now"; filter cutoff on the same axis with the cut region shaded; feedback harmonic in rust;
+  HOLD pad violet; SPACE tail sage; LAYER blue core. Envelope lane: output vs guitar level, the latest note's swell
+  projected dashed past "now". Legend row, input meter with a -24..-6 dB zone. Pictures for every module's controls.
+- POG2 measurement plan: `docs/POG2_TEST_PLAN.md`, test signal from `tools/pog2_testsignals.py`
+  (`measurements/pog2_test_signals.wav` + `pog2_cues.json`; WAVs are gitignored). Analysis script still to write once
+  recordings exist.

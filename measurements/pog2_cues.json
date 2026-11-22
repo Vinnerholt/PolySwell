@@ -1,0 +1,335 @@
+{
+ "sample_rate": 48000,
+ "length_s": 163.0,
+ "sections": [
+  {
+   "name": "silence",
+   "start": 0.0,
+   "length": 1.0
+  },
+  {
+   "name": "sync_start",
+   "start": 1.0,
+   "length": 2.0,
+   "note": "3 single-sample clicks 0.5 s apart"
+  },
+  {
+   "name": "calib_1k",
+   "start": 3.0,
+   "length": 3.0,
+   "level_dbfs": -18
+  },
+  {
+   "name": "silence",
+   "start": 6.0,
+   "length": 1.0
+  },
+  {
+   "name": "noise_floor",
+   "start": 7.0,
+   "length": 2.0
+  },
+  {
+   "name": "steady_E2",
+   "start": 9.0,
+   "length": 3.0,
+   "note": "E2",
+   "hz": 82.41
+  },
+  {
+   "name": "silence",
+   "start": 12.0,
+   "length": 2.0
+  },
+  {
+   "name": "steady_A2",
+   "start": 14.0,
+   "length": 3.0,
+   "note": "A2",
+   "hz": 110.0
+  },
+  {
+   "name": "silence",
+   "start": 17.0,
+   "length": 2.0
+  },
+  {
+   "name": "steady_E3",
+   "start": 19.0,
+   "length": 3.0,
+   "note": "E3",
+   "hz": 164.81
+  },
+  {
+   "name": "silence",
+   "start": 22.0,
+   "length": 2.0
+  },
+  {
+   "name": "steady_A3",
+   "start": 24.0,
+   "length": 3.0,
+   "note": "A3",
+   "hz": 220.0
+  },
+  {
+   "name": "silence",
+   "start": 27.0,
+   "length": 2.0
+  },
+  {
+   "name": "steady_A4",
+   "start": 29.0,
+   "length": 3.0,
+   "note": "A4",
+   "hz": 440.0
+  },
+  {
+   "name": "silence",
+   "start": 32.0,
+   "length": 2.0
+  },
+  {
+   "name": "steady_E5",
+   "start": 34.0,
+   "length": 3.0,
+   "note": "E5",
+   "hz": 659.26
+  },
+  {
+   "name": "silence",
+   "start": 37.0,
+   "length": 2.0
+  },
+  {
+   "name": "pluck_E2",
+   "start": 39.0,
+   "length": 4.0,
+   "note": "E2",
+   "hz": 82.41
+  },
+  {
+   "name": "pluck_A2",
+   "start": 43.0,
+   "length": 4.0,
+   "note": "A2",
+   "hz": 110.0
+  },
+  {
+   "name": "pluck_E3",
+   "start": 47.0,
+   "length": 4.0,
+   "note": "E3",
+   "hz": 164.81
+  },
+  {
+   "name": "pluck_A3",
+   "start": 51.0,
+   "length": 4.0,
+   "note": "A3",
+   "hz": 220.0
+  },
+  {
+   "name": "pluck_A4",
+   "start": 55.0,
+   "length": 4.0,
+   "note": "A4",
+   "hz": 440.0
+  },
+  {
+   "name": "pluck_E5",
+   "start": 59.0,
+   "length": 4.0,
+   "note": "E5",
+   "hz": 659.26
+  },
+  {
+   "name": "dyn_A3_36",
+   "start": 63.0,
+   "length": 3.0,
+   "level_dbfs": -36
+  },
+  {
+   "name": "dyn_A3_30",
+   "start": 66.0,
+   "length": 3.0,
+   "level_dbfs": -30
+  },
+  {
+   "name": "dyn_A3_24",
+   "start": 69.0,
+   "length": 3.0,
+   "level_dbfs": -24
+  },
+  {
+   "name": "dyn_A3_18",
+   "start": 72.0,
+   "length": 3.0,
+   "level_dbfs": -18
+  },
+  {
+   "name": "dyn_A3_12",
+   "start": 75.0,
+   "length": 3.0,
+   "level_dbfs": -12
+  },
+  {
+   "name": "dyn_A3_6",
+   "start": 78.0,
+   "length": 3.0,
+   "level_dbfs": -6
+  },
+  {
+   "name": "repick_1000ms",
+   "start": 81.0,
+   "length": 5.5,
+   "gap_s": 1.0
+  },
+  {
+   "name": "silence",
+   "start": 86.5,
+   "length": 1.0
+  },
+  {
+   "name": "repick_500ms",
+   "start": 87.5,
+   "length": 3.5,
+   "gap_s": 0.5
+  },
+  {
+   "name": "silence",
+   "start": 91.0,
+   "length": 1.0
+  },
+  {
+   "name": "repick_250ms",
+   "start": 92.0,
+   "length": 2.5,
+   "gap_s": 0.25
+  },
+  {
+   "name": "silence",
+   "start": 94.5,
+   "length": 1.0
+  },
+  {
+   "name": "repick_125ms",
+   "start": 95.5,
+   "length": 2.0,
+   "gap_s": 0.125
+  },
+  {
+   "name": "silence",
+   "start": 97.5,
+   "length": 1.0
+  },
+  {
+   "name": "repick_loud_then_quiet",
+   "start": 98.5,
+   "length": 4.0,
+   "levels_dbfs": [
+    -12,
+    -24
+   ],
+   "times": [
+    0.0,
+    1.2
+   ]
+  },
+  {
+   "name": "poly_A2_then_E4",
+   "start": 102.5,
+   "length": 6.0,
+   "first": "A2 at 0 s",
+   "second": "E4 at 1.5 s"
+  },
+  {
+   "name": "silence",
+   "start": 108.5,
+   "length": 1.5
+  },
+  {
+   "name": "chord_strum",
+   "start": 110.0,
+   "length": 5.0,
+   "notes": "E major, 6 strings",
+   "strum_s": 0.015
+  },
+  {
+   "name": "chord_block",
+   "start": 115.0,
+   "length": 5.0,
+   "notes": "E major, 6 strings",
+   "strum_s": 0.0
+  },
+  {
+   "name": "short_sounds",
+   "start": 120.0,
+   "length": 4.0,
+   "plucks": "8 x 80 ms, 150 ms apart",
+   "noise": "4 x 30 ms from 1.6 s"
+  },
+  {
+   "name": "silence",
+   "start": 124.0,
+   "length": 1.5
+  },
+  {
+   "name": "pink_noise",
+   "start": 125.5,
+   "length": 6.0,
+   "rms_dbfs": -24
+  },
+  {
+   "name": "silence",
+   "start": 131.5,
+   "length": 1.5
+  },
+  {
+   "name": "buzz_55Hz",
+   "start": 133.0,
+   "length": 6.0,
+   "hz": 55,
+   "harmonics": "to 16 kHz"
+  },
+  {
+   "name": "silence",
+   "start": 139.0,
+   "length": 1.5
+  },
+  {
+   "name": "log_sweep",
+   "start": 140.5,
+   "length": 12.0,
+   "f_from": 20.0,
+   "f_to": 20000.0
+  },
+  {
+   "name": "silence",
+   "start": 152.5,
+   "length": 1.5
+  },
+  {
+   "name": "sine_440",
+   "start": 154.0,
+   "length": 5.0,
+   "hz": 440
+  },
+  {
+   "name": "silence",
+   "start": 159.0,
+   "length": 1.0
+  },
+  {
+   "name": "sync_end",
+   "start": 160.0,
+   "length": 2.0,
+   "note": "3 clicks: checks the recording has no drift"
+  },
+  {
+   "name": "silence",
+   "start": 162.0,
+   "length": 1.0
+  }
+ ]
+}

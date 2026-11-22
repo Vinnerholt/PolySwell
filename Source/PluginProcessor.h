@@ -102,6 +102,7 @@ public:
     void forgetCc (const juce::String& paramId);
     int  ccFor (const juce::String& paramId) const;        // -1 = none
     bool isLearning (const juce::String& paramId) const;
+    void stopLearning() { ccLearn = -1; }
     float uiScale = 1.f;                    // editor size (0.75 .. 2)
     std::atomic<float> holdLevelNow { 0.f };   // HOLD pad fade 0..1 (for the UI)
     std::array<bool, 5> uiFold { false, false, false, false, false };   // BLOOM, MOTION, VOICE, SMEAR, DRIVE

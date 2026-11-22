@@ -1355,7 +1355,20 @@ private:
             const float  kBase = tr.hz / binHz * octR * vibFactor(s) * scoopF * lifeF * glideF;
             tr.ph = wrapPi(tr.ph + expected * kBase);
             const float ramp = tr.confirmedAt < 0 ? 0.f : std::clamp((float) (tr.age - tr.confirmedAt + 1) / 3.f, 0.f, 1.f);
-            if (! audio || ramp <= 0.f || g <= 0.0005f) continue;   // (MIDI only: the tracks are all we need)
+            if (! audio)   // no sound (MIDI out or the editor's window only): the tracks are all we need, published as heard
+            {
+                if (ramp > 0.f && g > 0.0005f && pubN < kVoicePub)
+                {
+                    voicePubHz[(size_t) pubN].store(kBase * binHz, std::memory_order_relaxed);
+                    voicePubLevel[(size_t) pubN].store(tr.amp * g * ramp, std::memory_order_relaxed);
+                    voicePubTime[(size_t) pubN].store(noteTime[s], std::memory_order_relaxed);
+                    voicePubScoop[(size_t) pubN].store(scoopLeft, std::memory_order_relaxed);
+                    voicePubVowel[(size_t) pubN].store(-1.f, std::memory_order_relaxed);
+                    ++pubN;
+                }
+                continue;
+            }
+            if (ramp <= 0.f || g <= 0.0005f) continue;
 
             const float t    = noteTime[s];
             const float A    = tr.amp * g * ramp * tr.monoGain * tuning::voiceLevel * (life > 0.f ? std::pow(10.f, tuning::lifeDb * life * tr.la / 20.f) : 1.f);
