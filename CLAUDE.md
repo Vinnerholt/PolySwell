@@ -218,3 +218,9 @@ rings (outer = lightest). Switch: SKIN chip in the top bar or gear > Skin; saved
   faded unless an IR is chosen. Window caption says FEEL+PACE when both changed a pick's attack; the hardest pick peaks
   at 95 % (was clipped). MOTION = 2 x 2 boxes (VIBRATO | TREMOLO with settings beside, SPREAD | DETUNE), tremolo SHAPE
   as pictures (`ShapeSeg`). Midnight plate regenerated from Sunburst (only warm cream paint -> navy; rim and worn frame kept).
+- POG2 make-up gain removed (owner: a 12 s ATTACK still jumped back to full level within ~1 s; LEVEL is the volume).
+  Measured: with only DRY OUTPUT up and ATTACK at 0 the POG2 is unity (1.00); the gain grows with its ATTACK (+2.2 dB at
+  1/4, +5.9 at 1/2, +8.3 at 3/4). Only the curve shape is modelled now; MATCH is the per-note "back to pick level".
+  Test 36 checks there is no gain. Presets POG2 swell (+8.5 dB LEVEL) and Warm pad (+4.5) rebalanced (`--peaks`).
+- Fourth skin Sunburst Night (`kNumSkins`): charcoal plate (`plate_night.png`, cream paint -> #221e1a), the Sunburst
+  logo with cream lettering (`logo_night.png`), cream ink, Sunburst rings and glow.

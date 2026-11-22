@@ -50,9 +50,10 @@ struct Skin
     juce::Image plateImg() const { return juce::ImageCache::getFromMemory (plate, plateSize); }
     juce::Image logoImg() const  { return juce::ImageCache::getFromMemory (logo, logoSize); }
 };
+constexpr int kNumSkins = 4;   // Sunburst, Lagoon, Midnight, Sunburst Night
 const Skin& skinAt (int i)
 {
-    static const Skin s[3] = {
+    static const Skin s[kNumSkins] = {
         { "Sunburst", BinaryData::plate_sunburst_png, BinaryData::plate_sunburst_pngSize, BinaryData::logo_sunburst_png, BinaryData::logo_sunburst_pngSize,
           Colour (0xff2a231b), Colour (0xffefe5cc), Colour (0x592a231b), Colour (0xffd9732f), Colour (0xfffff4df), Colour (0xffffb030),
           { Colour (0xffe09a45), Colour (0xffd9732f), Colour (0xffbc4320) },
@@ -64,8 +65,12 @@ const Skin& skinAt (int i)
         { "Midnight", BinaryData::plate_midnight_png, BinaryData::plate_midnight_pngSize, BinaryData::logo_midnight_png, BinaryData::logo_midnight_pngSize,
           Colour (0xffefe5cb), Colour (0xff23263a), Colour (0x47efe5cb), Colour (0xff4c8fe0), Colour (0xfff2f6ff), Colour (0xff7fe9dc),
           { Colour (0xff5ed6c5), Colour (0xff4c8fe0), Colour (0xff9248c2) },
-          Colour (0xff1d1036), Colour (0xff06040b), Colour (0xff7a5cff), Colour (0xffb49bff), Colour (0xfff1eaff), Colour (0xff9a86e6), Colour (0xffcbb8ff) } };
-    return s[juce::jlimit (0, 2, i)];
+          Colour (0xff1d1036), Colour (0xff06040b), Colour (0xff7a5cff), Colour (0xffb49bff), Colour (0xfff1eaff), Colour (0xff9a86e6), Colour (0xffcbb8ff) },
+        { "Sunburst Night", BinaryData::plate_night_png, BinaryData::plate_night_pngSize, BinaryData::logo_night_png, BinaryData::logo_night_pngSize,
+          Colour (0xffefe5cb), Colour (0xff1c1916), Colour (0x47efe5cb), Colour (0xffd9732f), Colour (0xfffff4df), Colour (0xffffb030),
+          { Colour (0xffe09a45), Colour (0xffd9732f), Colour (0xffbc4320) },
+          Colour (0xff3a1a08), Colour (0xff0c0503), Colour (0xffff8a1f), Colour (0xffffb347), Colour (0xfffff1cf), Colour (0xffe89a45), Colour (0xffffc777) } };
+    return s[juce::jlimit (0, kNumSkins - 1, i)];
 }
 
 // ------------------------------------------------------------------------------------------------ geometry
@@ -991,14 +996,7 @@ struct SignalWindow : juce::Component, juce::Timer
             // after the swell: from the matched level, at SUSTAIN's rate (or the string's own, without SUSTAIN)
             return during (attack) * std::pow (10.f, -rate * (t - attack) / 20.f);
         }
-        return pogGain (attack) * std::pow (10.f, (-8.f * t + lift) / 20.f) * swellGain (attack < 0.002f ? 1.f : t / attack, juce::roundToInt (P ("swellShape")));
-    }
-    // the POG2 shape's own make-up gain (as the engine; none with MATCH)
-    float pogGain (float attack) const
-    {
-        if (juce::roundToInt (P ("swellShape")) != 2 || P ("levelMatch") > 0.5f || attack < 0.002f) return 1.f;
-        const float tau = juce::jmax (attack / 3.f, 1.0e-3f);
-        return std::pow (10.f, juce::jlimit (0.f, 13.f, 5.75f + 4.83f * (std::log10 (tau) + 0.745f)) / 20.f);
+        return std::pow (10.f, (-8.f * t + lift) / 20.f) * swellGain (attack < 0.002f ? 1.f : t / attack, juce::roundToInt (P ("swellShape")));
     }
     // PACE, as the engine: the swell fast playing allows (0.4 x the time since the last note), blended in by PACE
     float pacedAttack (float A, float gap) const
@@ -2204,7 +2202,7 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
 
     void applySkin (int index)
     {
-        proc.uiSkin = juce::jlimit (0, 2, index);
+        proc.uiSkin = juce::jlimit (0, kNumSkins - 1, index);
         currentSkin = &skinAt (proc.uiSkin);
         look.skin = currentSkin;
         window.setSkin (*currentSkin);
@@ -2267,7 +2265,7 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         saveC->onPress = [this] { savePreset(); };
         skinC = chip (Chip::custom, "", "SKIN", col::amber, "Skin: the pedal's plate and colours (Sunburst, Lagoon, Midnight).", barOnly);
         skinC->textFn = [this] { return "SKIN " + String (skinAt (proc.uiSkin).name).toUpperCase(); };
-        skinC->setSize (128, 22);
+        skinC->setSize (176, 22);
         skinC->onPress = [this] { skinMenu (skinC); };
         for (int i = 0; i < 2; ++i)
         {
@@ -2607,7 +2605,7 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
     void skinMenu (juce::Component* target)
     {
         juce::PopupMenu m;
-        for (int i = 0; i < 3; ++i) m.addItem (1 + i, skinAt (i).name, true, proc.uiSkin == i);
+        for (int i = 0; i < kNumSkins; ++i) m.addItem (1 + i, skinAt (i).name, true, proc.uiSkin == i);
         m.setLookAndFeel (&look);
         m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (target), [this] (int r) { if (r > 0) applySkin (r - 1); });
     }
@@ -2666,13 +2664,13 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         }
         m.addSubMenu ("ATTACK tempo sync", syncM);
         juce::PopupMenu skinM;
-        for (int i = 0; i < 3; ++i) skinM.addItem (380 + i, skinAt (i).name, true, proc.uiSkin == i);
+        for (int i = 0; i < kNumSkins; ++i) skinM.addItem (380 + i, skinAt (i).name, true, proc.uiSkin == i);
         m.addSubMenu ("Skin", skinM);
         m.setLookAndFeel (&look);
         m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&gearB), [this, sizes] (int r)
         {
             auto flip = [this] (const char* id) { setParam (id, getParam (id) > 0.5f ? 0.f : 1.f); };
-            if (r >= 380 && r < 383) applySkin (r - 380);
+            if (r >= 380 && r < 380 + kNumSkins) applySkin (r - 380);
             else if (r >= 390 && r < 393) setParam ("swellShape", (float) (r - 390));
             else if (r == 395) setParam ("levelMatch", getParam ("levelMatch") > 0.5f ? 0.f : 1.f);
             else if (r == 400) setParam ("sync", 0.f);

@@ -69,7 +69,7 @@ namespace tuning
     // come back to about their pick level (held notes come out louder): +2.3 dB at tau 31 ms, +5.9 dB at 166 ms,
     // +9.9 dB at 1.45 s. Fit: dB = 5.75 + 4.83 (log10(tau) + 0.745), 0..13 dB.
     constexpr float pogK              = 3.0f;
-    constexpr float pogGainDb0        = 5.75f, pogGainSlope = 4.83f, pogGainLogRef = -0.745f, pogGainMaxDb = 13.0f;
+    // (the measured make-up gain is documented above but not applied: see the attack gain in the frame loop)
     constexpr float matchMaxBoost     = 8.0f;    // level-matched swell: at most +18 dB of make-up
     constexpr float matchPeakFrom     = 0.03f;   // ... the pick's level is the loudest frame 30..110 ms after the onset
     constexpr float matchPeakSec      = 0.11f;   //     (the first frames hold the pick's click spread over many bins)
@@ -817,13 +817,8 @@ private:
             // 2) attack gain
             const float ph = phase[i];
             float g = swellGain(ph, params.swellShape) * binEven[i];
-            // POG2: the pedal's own make-up gain for this note's swell time (not with MATCH, which does the same job per note)
-            if (params.swellShape == 2 && ! params.levelMatch && T > 0.f)
-            {
-                const float tau = std::max(T * attackMul[i] / tuning::pogK, 1.0e-3f);
-                const float db = std::clamp(tuning::pogGainDb0 + tuning::pogGainSlope * (std::log10(tau) - tuning::pogGainLogRef), 0.f, tuning::pogGainMaxDb);
-                g *= std::pow(10.f, db / 20.f);
-            }
+            // (POG2: the pedal's own make-up gain, which grows with ATTACK, is NOT modelled - owner, 2026-11-22: it made long
+            // swells jump back to full level within a second and did LEVEL's job unseen. MATCH is the per-note alternative.)
             if (params.bowedBody) g *= bodyGain[i];
             if (repickFloor[i] > 0.f)
             {

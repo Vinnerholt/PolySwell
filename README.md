@@ -13,7 +13,7 @@ ambient pads and "amp in the room" feedback. The swell is modelled on a measured
 - Per-note swell (ATTACK, SUSTAIN, TONE), shaped by how you play (FEEL, PACE, EVEN), with MATCH for level-matched swells.
 - Effects panel, all note-aware: FILTER, FEEDBACK (amp in the room), MOTION, LAYER (a synth under each note), SPACE.
 - A live signal window showing each note you play, and a picture of what each knob does as you turn it.
-- Three skins (Sunburst, Lagoon, Midnight), undo/redo, A/B compare, MIDI learn, presets for Lead / Pad / Feedback.
+- Four skins (Sunburst, Lagoon, Midnight, Sunburst Night), undo/redo, A/B compare, MIDI learn, presets for Lead / Pad / Feedback.
 
 ## Install (no building needed)
 Download the zip for your system from [the latest release](../../releases/latest):

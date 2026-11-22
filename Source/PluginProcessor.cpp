@@ -36,8 +36,8 @@ namespace
                                            { "fbRise", 1.2f }, { "smearOn", 1 }, { "smearLevel", 0.3f }, { "smearSize", 0.45f }, { "smearSend", 1 } } },
             // the owner's POG2 setting (run G1), fitted by rendering the test file (tools/pog2_compare.py): ATTACK 2 s,
             // 18 dB/oct at 1 kHz, the +-10 cent copies 15..19 dB under the note (MIX 0.39). Held notes ~2 dB, plucks ~4 dB.
-            { "POG2 swell", "Pad", { { "attack", 2000 }, { "freq", 1000 }, { "detune", 10.1f }, { "detuneMix", 0.39f } } },
-            { "Warm pad", "Pad", { { "attack", 1200 }, { "sustain", 0.8f }, { "freq", 1800 }, { "mod", 0.4f }, { "res", 0.15f },
+            { "POG2 swell", "Pad", { { "attack", 2000 }, { "vol", 8.5f }, { "freq", 1000 }, { "detune", 10.1f }, { "detuneMix", 0.39f } } },
+            { "Warm pad", "Pad", { { "attack", 1200 }, { "vol", 4.5f }, { "sustain", 0.8f }, { "freq", 1800 }, { "mod", 0.4f }, { "res", 0.15f },
                                    { "spread", 0.6f }, { "detuneMix", 0.5f }, { "smearOn", 1 }, { "smearSize", 0.7f }, { "smearLevel", 0.5f }, { "smearSend", 1 } } },
             { "Glass pad", "Pad", { { "attack", 900 }, { "sustain", 0.6f }, { "voiceMix", 0.4f }, { "voiceWave", 5 }, { "voiceOct", 2 }, { "voiceTone", 5000 },
                                     { "voiceUnison", 0.3f }, { "spread", 0.5f }, { "smearOn", 1 }, { "smearSize", 0.65f }, { "smearLevel", 0.45f } } },
@@ -1031,7 +1031,7 @@ void PolySwellProcessor::setStateInformation (const void* data, int size)
             userPresetLoaded = (bool) vt.getProperty ("userPreset", false);
             uiPedalsOpen = (bool) vt.getProperty ("uiPedalsOpen", true);
             uiScale = juce::jlimit (0.75f, 2.f, (float) (double) vt.getProperty ("uiScale", 1.0));
-            uiSkin = juce::jlimit (0, 2, (int) vt.getProperty ("uiSkin", 0));
+            uiSkin = juce::jlimit (0, 3, (int) vt.getProperty ("uiSkin", 0));
             uiWindowNotes = (bool) vt.getProperty ("uiWindowNotes", false);
             for (int i = 0; i < 3; ++i)
             {

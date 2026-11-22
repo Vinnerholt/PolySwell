@@ -1386,7 +1386,7 @@ int main()
         check(rms < 0.002, "muting the string kills the feedback");
     }
 
-    std::printf("Test 36: POG2 swell (measured: 1 - e^(-t/tau), tau = ATTACK / 3, plus the pedal's make-up gain)\n");
+    std::printf("Test 36: POG2 swell (measured: 1 - e^(-t/tau), tau = ATTACK / 3; the pedal's make-up gain is left out)\n");
     {
         const int n = at(3.0), t0 = at(0.2);
         std::vector<float> x((size_t) n, 0.f);
@@ -1402,7 +1402,7 @@ int main()
                     at1, classicAt, gainDb, matchDb);
         check(at1 > 0.5 && at1 < 0.75, "POG2 shape: fast start, about 63 % after one time constant");
         check(classicAt < 0.25, "the classic shape starts slowly (for comparison)");
-        check(gainDb > 4.5 && gainDb < 7.0, "POG2 make-up gain for a 0.5 s swell (about +6 dB, as measured)");
+        check(std::abs(gainDb) < 1.0, "no make-up gain: a swell settles at the guitar's own level (LEVEL sets the volume)");
         check(std::abs(matchDb) < 1.0, "with MATCH the POG2 gain is left out (MATCH does that job per note)");
     }
 

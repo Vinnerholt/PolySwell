@@ -316,7 +316,7 @@ int main (int argc, char** argv)
     if (pe != nullptr)
     {
         pe->setUiScale (1.f);
-        for (int sk = 0; sk < 3; ++sk) { pe->setSkin (sk); pump (300); shoot (e, out.getChildFile ("skin_" + juce::String (sk) + ".png")); }
+        for (int sk = 0; sk < 4; ++sk) { pe->setSkin (sk); pump (300); shoot (e, out.getChildFile ("skin_" + juce::String (sk) + ".png")); }
         pe->setSkin (0);
     }
 
