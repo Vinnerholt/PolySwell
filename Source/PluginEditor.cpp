@@ -2,6 +2,7 @@
 // footswitches) and a panel of six tinted modules. Static artwork (enclosure, plates, lettering) is baked once into an
 // image at the current size; knob bodies are baked per size too. Only indicators, LEDs, chips and the window repaint.
 #include "PluginEditor.h"
+#include "BinaryData.h"
 
 namespace
 {
@@ -25,6 +26,38 @@ juce::Font uiFont (float h, bool bold = true, float track = 0.12f)
              .withHorizontalScale (0.88f).withExtraKerningFactor (track);
 }
 juce::Font monoFont (float h) { return juce::Font (juce::FontOptions ("Consolas", h, juce::Font::plain)); }
+
+// ------------------------------------------------------------------------------------------------ skins
+// The pedal is printed on a worn plate (the owner's artwork, resources/skin), with the PolySwell logo; a skin sets the
+// plate, the logo, the ink, the knobs' three ring colours (the logo's rings, outer = lightest), the LED and the window's
+// glow. The effects panel keeps its own dark look.
+struct Skin
+{
+    const char* name;
+    const char* plate; int plateSize; const char* logo; int logoSize;
+    Colour ink, body1, frame2, accent, onAccent, led;
+    Colour rings[3];
+    Colour glass1, glass2, glow, amber, pale, text, textHi;
+    juce::Image plateImg() const { return juce::ImageCache::getFromMemory (plate, plateSize); }
+    juce::Image logoImg() const  { return juce::ImageCache::getFromMemory (logo, logoSize); }
+};
+const Skin& skinAt (int i)
+{
+    static const Skin s[3] = {
+        { "Sunburst", BinaryData::plate_sunburst_png, BinaryData::plate_sunburst_pngSize, BinaryData::logo_sunburst_png, BinaryData::logo_sunburst_pngSize,
+          Colour (0xff2a231b), Colour (0xffefe5cc), Colour (0x592a231b), Colour (0xffd9732f), Colour (0xfffff4df), Colour (0xffffb030),
+          { Colour (0xffe09a45), Colour (0xffd9732f), Colour (0xffbc4320) },
+          Colour (0xff3a1a08), Colour (0xff0c0503), Colour (0xffff8a1f), Colour (0xffffb347), Colour (0xfffff1cf), Colour (0xffe89a45), Colour (0xffffc777) },
+        { "Lagoon", BinaryData::plate_lagoon_png, BinaryData::plate_lagoon_pngSize, BinaryData::logo_lagoon_png, BinaryData::logo_lagoon_pngSize,
+          Colour (0xff1f2433), Colour (0xffebe9de), Colour (0x541f2433), Colour (0xff3b86c9), Colour (0xfff2f6ff), Colour (0xff5fe8d6),
+          { Colour (0xff4fc3b5), Colour (0xff3b86c9), Colour (0xff6a3aa0) },
+          Colour (0xff082a2c), Colour (0xff03090b), Colour (0xff35bfd1), Colour (0xff6ff0dd), Colour (0xffe4fffa), Colour (0xff4fc9bb), Colour (0xff8ff5e6) },
+        { "Midnight", BinaryData::plate_midnight_png, BinaryData::plate_midnight_pngSize, BinaryData::logo_midnight_png, BinaryData::logo_midnight_pngSize,
+          Colour (0xffefe5cb), Colour (0xff23263a), Colour (0x47efe5cb), Colour (0xff4c8fe0), Colour (0xfff2f6ff), Colour (0xff7fe9dc),
+          { Colour (0xff5ed6c5), Colour (0xff4c8fe0), Colour (0xff9248c2) },
+          Colour (0xff1d1036), Colour (0xff06040b), Colour (0xff7a5cff), Colour (0xffb49bff), Colour (0xfff1eaff), Colour (0xff9a86e6), Colour (0xffcbb8ff) } };
+    return s[juce::jlimit (0, 2, i)];
+}
 
 // ------------------------------------------------------------------------------------------------ geometry
 constexpr float kPedalX = 22, kPedalY = 56, kPedalW = 392, kPedalH = 646;
@@ -246,6 +279,35 @@ struct Look : juce::LookAndFeel_V4
         const Rect b ((float) x, (float) y, (float) w, (float) h);
         if (kind == 3) { drawValueChip (g, b, pos, s, ac); return; }
 
+        if (kind < 2 && skin != nullptr)   // the pedal's knobs: ivory, the logo's three rings around it filling with the value
+        {
+            const float bw = (float) w, c = b.getCentreX(), cy = b.getCentreY();
+            const float rw = bw > 100.f ? 3.4f : bw > 60.f ? 2.6f : 2.f, gap = rw + 1.8f, pad = 6.f + 3.f * gap + 4.f;
+            const float R = bw * 0.5f - pad, a = a0 + pos * (a1 - a0);
+            const juce::PathStrokeType st (rw, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
+            for (int k = 0; k < 3; ++k)
+            {
+                const float r = R + 5.f + (float) (2 - k) * gap;
+                juce::Path track; track.addCentredArc (c, cy, r, r, 0.f, a0, a1, true);
+                g.setColour (skin->rings[k].withAlpha (0.22f)); g.strokePath (track, st);
+                if (a > a0 + 0.01f)
+                {
+                    juce::Path lit; lit.addCentredArc (c, cy, r, r, 0.f, a0, a, true);
+                    g.setColour (skin->rings[k]); g.strokePath (lit, st);
+                }
+            }
+            juce::Path face; face.addEllipse (c - R, cy - R, 2 * R, 2 * R);
+            juce::DropShadow (juce::Colours::black.withAlpha (0.45f), juce::jmax (2, juce::roundToInt (R * 0.18f)), { 0, juce::jmax (1, juce::roundToInt (R * 0.09f)) }).drawForPath (g, face);
+            juce::ColourGradient fg (Colour (0xfffffaf0), c - R * 0.24f, cy - R * 0.4f, Colour (0xffc9bc9d), c + R * 0.6f, cy + R * 0.9f, true);
+            fg.addColour (0.55, Colour (0xffece2cb));
+            g.setGradientFill (fg); g.fillPath (face);
+            g.setColour (juce::Colours::black.withAlpha (0.28f)); g.strokePath (face, juce::PathStrokeType (1.f));
+            g.setColour (Colour (0x1f3c2814)); g.drawEllipse (c - R * 0.8f, cy - R * 0.8f, R * 1.6f, R * 1.6f, 1.2f);
+            const float sn = std::sin (a), cs = -std::cos (a);
+            g.setColour (Colour (0xff2a231b));
+            g.drawLine (juce::Line<float> (c + sn * R * 0.25f, cy + cs * R * 0.25f, c + sn * R * 0.86f, cy + cs * R * 0.86f), R > 25.f ? 4.5f : R > 16.f ? 3.5f : 2.6f);
+            return;
+        }
         const float ps = g.getInternalContext().getPhysicalPixelScaleFactor();
         const int px = juce::jmax (8, juce::roundToInt ((float) w * ps));
         g.setImageResamplingQuality (Graphics::highResamplingQuality);
@@ -306,6 +368,7 @@ struct Look : juce::LookAndFeel_V4
     }
 
     std::map<int, juce::Image> bodies;
+    const Skin* skin = nullptr;   // the pedal's knobs follow the skin
 };
 
 // "300.0000000" -> "300 ms", "5.50 Hz" -> "5.5 Hz": at most three significant digits, no trailing zeros, with its unit
@@ -441,6 +504,23 @@ struct Chip : juce::Button
     {
         const auto b = getLocalBounds().toFloat();
         const bool on = lit();
+        if (pedalSkin != nullptr && *pedalSkin != nullptr)   // on the pedal: a printed pill
+        {
+            const Skin& sk = **pedalSkin;
+            const auto r = b.reduced (0.75f);
+            if (on) { g.setColour (sk.accent); g.fillRoundedRectangle (r, r.getHeight() * 0.5f); }
+            else { g.setColour (sk.ink.withAlpha (over ? 1.f : 0.85f)); g.drawRoundedRectangle (r, r.getHeight() * 0.5f, 1.5f); }
+            g.setFont (uiFont (11.f, true, 0.14f));
+            g.setColour (on ? sk.onAccent : sk.ink);
+            g.drawText (shown(), b.withTrimmedLeft (10).withTrimmedRight (mode == toggle ? 8.f : 18.f), juce::Justification::centredLeft);
+            if (mode != toggle)
+            {
+                juce::Path t; const float x = b.getRight() - 13, y = b.getCentreY() - 1.5f;
+                t.addTriangle (x - 3.5f, y, x + 3.5f, y, x, y + 4.5f);
+                g.fillPath (t);
+            }
+            return;
+        }
         Look::chipFrame (g, b, on, ac, over);
         g.setFont (uiFont (11.5f, true, 0.08f));
         g.setColour (on ? Colour (0xff1f1408) : col::chipText);
@@ -474,6 +554,7 @@ struct Chip : juce::Button
     String label;
     Colour ac;
     std::function<void (bool)> onHover;
+    const Skin* const* pedalSkin = nullptr;   // set for the chips printed on the pedal
     std::unique_ptr<Bound> bound;
     std::function<String()> textFn;
     std::function<bool()> litFn;
@@ -534,18 +615,18 @@ struct Seg : juce::Component, juce::SettableTooltipClient
     Bound bound;
 };
 
-static void drawLed (Graphics& g, Rect b, bool on)
+static void drawLed (Graphics& g, Rect b, bool on, Colour tint = Colour (0xffffb030))
 {
     const float c = b.getCentreX(), cy = b.getCentreY(), r = 5.f;
     if (on)
     {
-        g.setGradientFill (juce::ColourGradient (Colour (0xffffa028).withAlpha (0.6f), c, cy, Colour (0x00ffa028), c + r * 3.2f, cy, true));
+        g.setGradientFill (juce::ColourGradient (tint.withAlpha (0.6f), c, cy, tint.withAlpha (0.f), c + r * 3.2f, cy, true));
         g.fillEllipse (c - r * 3.2f, cy - r * 3.2f, r * 6.4f, r * 6.4f);
     }
     g.setColour (juce::Colours::black.withAlpha (0.5f)); g.fillEllipse (c - r - 2, cy - r - 2, 2 * r + 4, 2 * r + 4);
-    juce::ColourGradient gr (on ? Colour (0xfffff7dc) : Colour (0xff7a4a1a), c - r * 0.3f, cy - r * 0.4f,
-                             on ? Colour (0xffc06400) : Colour (0xff2c1706), c + r, cy + r, true);
-    if (on) gr.addColour (0.4, Colour (0xffffb030));
+    juce::ColourGradient gr (on ? Colour (0xfffff7dc) : tint.withMultipliedBrightness (0.45f).withMultipliedSaturation (0.7f), c - r * 0.3f, cy - r * 0.4f,
+                             on ? tint.withMultipliedBrightness (0.72f) : tint.withMultipliedBrightness (0.16f), c + r, cy + r, true);
+    if (on) gr.addColour (0.4, tint);
     g.setGradientFill (gr);
     g.fillEllipse (c - r, cy - r, 2 * r, 2 * r);
 }
@@ -556,7 +637,9 @@ struct Led : juce::Button
         : juce::Button (paramId), invert (inverted), bound (p, paramId, [this] { repaint(); })
     { setTooltip (tip); setMouseCursor (juce::MouseCursor::PointingHandCursor); }
     bool on() const { return (bound.value > 0.5f) != invert; }
-    void paintButton (Graphics& g, bool, bool) override { drawLed (g, getLocalBounds().toFloat(), on()); }
+    void paintButton (Graphics& g, bool, bool) override
+    { drawLed (g, getLocalBounds().toFloat(), on(), (pedalSkin != nullptr && *pedalSkin != nullptr) ? (*pedalSkin)->led : Colour (0xffffb030)); }
+    const Skin* const* pedalSkin = nullptr;
     void clicked() override { bound.set (bound.value > 0.5f ? 0.f : 1.f); }
     bool invert;
     Bound bound;
@@ -565,31 +648,22 @@ struct Led : juce::Button
 struct FootSwitch : juce::Component, juce::SettableTooltipClient
 {
     FootSwitch() { setMouseCursor (juce::MouseCursor::PointingHandCursor); }
-    void paint (Graphics& g) override
+    void paint (Graphics& g) override   // the owner's footswitch photo (resources/skin/footswitch.png)
     {
+        if (! img.isValid()) img = juce::ImageCache::getFromMemory (BinaryData::footswitch_png, BinaryData::footswitch_pngSize);
         const auto b = getLocalBounds().toFloat();
-        const float c = b.getCentreX(), cy = b.getCentreY(), R = 31.f;
-        juce::Path nut; nut.addEllipse (c - R, cy - R, 2 * R, 2 * R);
-        juce::DropShadow (juce::Colours::black.withAlpha (0.7f), 10, { 0, 7 }).drawForPath (g, nut);
-        for (int i = 0; i < 120; ++i)   // chromed nut
-        {
-            const float a = 2 * kPi * (float) i / 120.f, v = 0.6f + 0.2f * std::cos (2.f * (a - 0.5f)) + 0.12f * std::cos (6.f * a);
-            juce::Path w; w.addPieSegment (c - R, cy - R, 2 * R, 2 * R, a, a + 2 * kPi / 120.f + 0.02f, 0.f);
-            g.setColour (Colour::fromFloatRGBA (v, v * 0.99f, v * 0.96f, 1.f)); g.fillPath (w);
-        }
-        g.setColour (juce::Colours::white.withAlpha (0.55f)); g.drawEllipse (c - R + 0.5f, cy - R + 0.5f, 2 * R - 1, 2 * R - 1, 1.f);
-        const float r = down ? 19.f : 20.f, oy = down ? 1.f : 0.f;
-        juce::Path cap; cap.addEllipse (c - r, cy - r + oy, 2 * r, 2 * r);
-        juce::DropShadow (juce::Colours::black.withAlpha (0.6f), down ? 2 : 5, { 0, down ? 1 : 3 }).drawForPath (g, cap);
-        juce::ColourGradient gr (juce::Colours::white, c - r * 0.3f, cy - r * 0.45f + oy, Colour (0xff55524e), c + r * 0.8f, cy + r + oy, true);
-        gr.addColour (0.35, Colour (0xffc9c6bf)); gr.addColour (0.75, Colour (0xff77746f));
-        g.setGradientFill (gr); g.fillPath (cap);
+        const float c = b.getCentreX(), cy = b.getCentreY(), R = down ? 31.f : 32.f, oy = down ? 1.f : 0.f;
+        juce::Path disc; disc.addEllipse (c - R, cy - R + oy, 2 * R, 2 * R);
+        juce::DropShadow (juce::Colours::black.withAlpha (0.55f), down ? 4 : 8, { 0, down ? 2 : 4 }).drawForPath (g, disc);
+        g.setImageResamplingQuality (Graphics::highResamplingQuality);
+        g.drawImage (img, Rect (c - R, cy - R + oy, 2 * R, 2 * R));
     }
     void mouseDown (const juce::MouseEvent& e) override { if (e.mods.isPopupMenu()) { if (onMenu) onMenu(); return; } down = true; repaint(); if (onDown) onDown(); }
     void mouseUp (const juce::MouseEvent& e) override { if (e.mods.isPopupMenu()) return; down = false; repaint(); if (onUp) onUp(); }
     bool hitTest (int x, int y) override { return juce::Point<float> ((float) x, (float) y).getDistanceFrom (getLocalBounds().toFloat().getCentre()) < 32.f; }
     std::function<void()> onDown, onUp, onMenu;
     bool down = false;
+    juce::Image img;
 };
 
 struct IconButton : juce::Button
@@ -665,6 +739,16 @@ struct SignalWindow : juce::Component, juce::Timer
     struct Col { int n = 0; float midi[kMaxN] {}, lvl[kMaxN] {}, hot[kMaxN] {}, fb[kMaxN] {}; float cut = 0.f, outDb = -120.f, inDb = -120.f; bool pick = false; };
 
     explicit SignalWindow (PolySwellProcessor& p) : proc (p) { setInterceptsMouseClicks (false, false); startTimerHz (30); }
+
+    // the glow of the window follows the skin (the effects' own colours - filter, feedback, layer ... - stay)
+    void setSkin (const Skin& s)
+    {
+        cAmber = s.amber; cPale = s.pale; cGlow = s.glow; cGlass1 = s.glass1; cGlass2 = s.glass2; cText = s.text; cTextHi = s.textHi;
+        cCaption = s.text.interpolatedWith (s.pale, 0.55f);
+        repaint();
+    }
+    Colour cAmber { 0xffffb347 }, cPale { 0xfffff1cf }, cGlow { 0xffff8a1f }, cGlass1 { 0xff3a1a08 }, cGlass2 { 0xff0c0503 },
+           cText { 0xffe89a45 }, cTextHi { 0xffffc777 }, cCaption { 0xffe9c79a };
 
     void setReadout (const String& n, const String& v) { roName = n.toUpperCase(); roValue = v; roTicks = 60; }
 
@@ -920,14 +1004,14 @@ struct SignalWindow : juce::Component, juce::Timer
     Plot timeGrid (Graphics& g, Rect b, float T = kT, float gain = 1.f) const
     {
         const Plot pl { 14.f, b.getWidth() - 28.f, b.getHeight() - 24.f, b.getHeight() - 50.f, T, gain };
-        g.setColour (Colour (0x33ff9a3a)); g.fillRect (pl.x0, pl.base, pl.w, 1.f);
+        g.setColour (cGlow.withAlpha (0x33 / 255.f)); g.fillRect (pl.x0, pl.base, pl.w, 1.f);
         const float step = T <= 0.6f ? 0.1f : T <= 1.2f ? 0.25f : T <= 2.4f ? 0.5f : 1.f;
         for (int k = 1; (float) k * step < T - 0.02f; ++k)
         {
             const float t = (float) k * step;
-            g.setColour (Colour (0x22ff9a3a)); g.fillRect (pl.x (t), pl.base - pl.h, 1.f, pl.h + 4.f);
+            g.setColour (cGlow.withAlpha (0x22 / 255.f)); g.fillRect (pl.x (t), pl.base - pl.h, 1.f, pl.h + 4.f);
             tag (g, step < 1.f ? String (juce::roundToInt (t * 1000.f)) + " ms" : String (juce::roundToInt (t)) + " s",
-                 pl.x (t) + 3.f, pl.base - pl.h + 4.f, Colour (0x88e89a45));
+                 pl.x (t) + 3.f, pl.base - pl.h + 4.f, cText.withAlpha (0x88 / 255.f));
         }
         return pl;
     }
@@ -942,7 +1026,7 @@ struct SignalWindow : juce::Component, juce::Timer
 
     String paintSwell (Graphics& g, Rect b)
     {
-        const Colour amberC (0xffffb347), guitarC (0xffd8c3a2), paleC (0xfffff1cf);
+        const Colour amberC (cAmber), guitarC (0xffd8c3a2), paleC (cPale);
         const float A = P ("attack") * 0.001f;
         const String id = focusId;
         auto peakOf = [] (auto&& fn, float T) { float m = 1.0e-4f; for (int i = 0; i <= 240; ++i) m = juce::jmax (m, fn (T * (float) i / 240.f)); return m; };
@@ -980,8 +1064,8 @@ struct SignalWindow : juce::Component, juce::Timer
                 dashed (g, curve (pl, o, [&] (float t) { return swelled (t - o, A); }), amberC.withAlpha (0.4f));
                 glowLine (g, curve (pl, o, [&] (float t) { return swelled (t - o, a[i]); }), amberC, i == 0 ? &pl : nullptr);
             }
-            tag (g, "SLOW NOTES", pl.x (0.05f), pl.base - pl.h + 16.f, Colour (0xcce89a45));
-            tag (g, "FAST NOTES", pl.x (2.1f), pl.base - pl.h + 16.f, Colour (0xcce89a45));
+            tag (g, "SLOW NOTES", pl.x (0.05f), pl.base - pl.h + 16.f, cText.withAlpha (0xcc / 255.f));
+            tag (g, "FAST NOTES", pl.x (2.1f), pl.base - pl.h + 16.f, cText.withAlpha (0xcc / 255.f));
             if (f <= 0.005f) return "off: every note swells over the full ATTACK";
             return "fast notes swell over " + ms (a[5]) + " instead of " + ms (A) + " (dashed)";
         }
@@ -995,7 +1079,7 @@ struct SignalWindow : juce::Component, juce::Timer
                 const float o = on[i], av = amp[i], lev = av + (0.72f - av) * e;
                 dashed (g, curve (pl, o, [=] (float t) { return av * natural (t - o); }), guitarC.withAlpha (0.55f));
                 glowLine (g, curve (pl, o, [&] (float t) { return lev * swelled (t - o, A); }), amberC, &pl);
-                tag (g, i == 0 ? "SOFT PICK" : "HARD PICK", pl.x (o) + 22.f, pl.base - pl.h + 16.f, Colour (0xcce89a45));
+                tag (g, i == 0 ? "SOFT PICK" : "HARD PICK", pl.x (o) + 22.f, pl.base - pl.h + 16.f, cText.withAlpha (0xcc / 255.f));
             }
             return e > 0.01f ? "soft and hard picks come out closer in level" : "off: each note keeps its own level";
         }
@@ -1054,12 +1138,12 @@ struct SignalWindow : juce::Component, juce::Timer
         const float fLo = 60.f, fHi = 14000.f;
         auto X = [&] (float f) { return x0 + w * std::log (f / fLo) / std::log (fHi / fLo); };
         auto Y = [&] (float db) { return juce::jlimit (top - 4.f, bot, top + (bot - top) * (18.f - db) / 54.f); };
-        g.setColour (Colour (0x33ff9a3a)); g.fillRect (x0, Y (0.f), w, 1.f);
+        g.setColour (cGlow.withAlpha (0x33 / 255.f)); g.fillRect (x0, Y (0.f), w, 1.f);
         const std::pair<float, const char*> marks[] = { { 100.f, "100" }, { 1000.f, "1 k" }, { 10000.f, "10 k" } };
         for (auto& m : marks)
         {
-            g.setColour (Colour (0x22ff9a3a)); g.fillRect (X (m.first), top, 1.f, bot - top + 4.f);
-            tag (g, m.second, X (m.first) + 3.f, bot - 7.f, Colour (0x88e89a45));
+            g.setColour (cGlow.withAlpha (0x22 / 255.f)); g.fillRect (X (m.first), top, 1.f, bot - top + 4.f);
+            tag (g, m.second, X (m.first) + 3.f, bot - 7.f, cText.withAlpha (0x88 / 255.f));
         }
         const bool fon = P ("filterOn") > 0.5f;
         const float fc = P ("freq"), q = 0.5f * std::pow (20.f, juce::jlimit (0.f, 1.f, P ("res")));
@@ -1124,7 +1208,7 @@ struct SignalWindow : juce::Component, juce::Timer
         const Colour gold (0xfff2c96a);
         const Plot pl = timeGrid (g, b);
         const float mid = pl.base - pl.h * 0.5f, half = pl.h * 0.5f;
-        g.setColour (Colour (0x33ff9a3a)); g.fillRect (pl.x0, mid, pl.w, 1.f);
+        g.setColour (cGlow.withAlpha (0x33 / 255.f)); g.fillRect (pl.x0, mid, pl.w, 1.f);
         const float depth = on ("vibDepthOn") ? P ("vibDepth") : 0.f, rate = P ("vibRate"), delay = P ("vibDelay");
         const bool human = on ("vibHuman");
         juce::Path p; float ph = 0.f; const int n = 420;
@@ -1143,8 +1227,8 @@ struct SignalWindow : juce::Component, juce::Timer
             if (i == 0) p.startNewSubPath (pl.x (t), y); else p.lineTo (pl.x (t), y);
         }
         glowLine (g, p, gold);
-        tag (g, "+50 C", pl.x0 + 2.f, pl.base - pl.h + 16.f, Colour (0x88e89a45));
-        tag (g, "-50 C", pl.x0 + 2.f, pl.base - 8.f, Colour (0x88e89a45));
+        tag (g, "+50 C", pl.x0 + 2.f, pl.base - pl.h + 16.f, cText.withAlpha (0x88 / 255.f));
+        tag (g, "-50 C", pl.x0 + 2.f, pl.base - 8.f, cText.withAlpha (0x88 / 255.f));
         if (delay > 0.02f && depth > 0.1f) markAt (g, pl, delay, gold);
         static const char* target[3] = { "the voice", "guitar and voice", "the guitar" };
         if (depth < 0.1f) return "off: the pitch stays put";
@@ -1164,7 +1248,7 @@ struct SignalWindow : juce::Component, juce::Timer
             if (shape == 2) return 0.5f - 0.5f * std::tanh (5.f * std::cos (2.f * kPi * x)) / std::tanh (5.f);
             return 0.5f - 0.5f * std::cos (2.f * kPi * x);
         };
-        dashed (g, curve (pl, 0.f, [&] (float t) { return swelled (t, A); }), Colour (0xffffb347).withAlpha (0.45f));
+        dashed (g, curve (pl, 0.f, [&] (float t) { return swelled (t, A); }), cAmber.withAlpha (0.45f));
         glowLine (g, curve (pl, 0.f, [&] (float t) { return swelled (t, A) * (1.f - depth * lfo (t)); }), Colour (0xfff2c96a), &pl);
         if (depth < 0.005f) return "off: each note keeps a steady level";
         return on ("tremSyncOn") ? String ("each note pulses on its own, in time with the host tempo")
@@ -1177,10 +1261,10 @@ struct SignalWindow : juce::Component, juce::Timer
         const float sp = on ("spreadOn") ? P ("spread") : 0.f;
         const int mode = juce::roundToInt (P ("spreadMode"));
         const float x0 = 34.f, x1 = b.getWidth() - 34.f, top = 34.f, bot = b.getHeight() - 30.f, cx = 0.5f * (x0 + x1);
-        for (float y = top - 6.f; y < bot; y += 5.f) { g.setColour (Colour (0x44ff9a3a)); g.fillRect (cx, y, 1.f, 2.5f); }
-        g.setColour (Colour (0x33ff9a3a)); g.fillRect (x0, bot + 4.f, x1 - x0, 1.f);
-        tag (g, "L", x0 - 20.f, 0.5f * (top + bot), Colour (0x99e89a45));
-        tag (g, "R", x1 + 20.f, 0.5f * (top + bot), Colour (0x99e89a45), juce::Justification::centredRight);
+        for (float y = top - 6.f; y < bot; y += 5.f) { g.setColour (cGlow.withAlpha (0x44 / 255.f)); g.fillRect (cx, y, 1.f, 2.5f); }
+        g.setColour (cGlow.withAlpha (0x33 / 255.f)); g.fillRect (x0, bot + 4.f, x1 - x0, 1.f);
+        tag (g, "L", x0 - 20.f, 0.5f * (top + bot), cText.withAlpha (0x99 / 255.f));
+        tag (g, "R", x1 + 20.f, 0.5f * (top + bot), cText.withAlpha (0x99 / 255.f), juce::Justification::centredRight);
         static const char* names[6] = { "E2", "A2", "D3", "G3", "B3", "E4" };
         const float strength[6] = { -0.5f, 0.7f, -0.9f, 0.2f, 0.9f, -0.2f };
         uint32_t seed = 12345u;
@@ -1211,12 +1295,12 @@ struct SignalWindow : juce::Component, juce::Timer
     {
         const Plot pl = timeGrid (g, b);
         const float mid = pl.base - pl.h * 0.5f, half = pl.h * 0.5f;
-        g.setColour (Colour (0x33ff9a3a)); g.fillRect (pl.x0, mid, pl.w, 1.f);
+        g.setColour (cGlow.withAlpha (0x33 / 255.f)); g.fillRect (pl.x0, mid, pl.w, 1.f);
         const float d = P ("detune"), wob = P ("detuneWobble");
         const float a = on ("detuneOn") ? PolySwellProcessor::detuneCopyLevel (P ("detuneMix")) * juce::jmin (1.f, d / 5.f) : 0.f;
         // the note itself, fading as the copies take over
         juce::Path nt; nt.startNewSubPath (pl.x0, mid); nt.lineTo (pl.x0 + pl.w, mid);
-        if (a < 0.995f) glowLine (g, nt, Colour (0xffffb347).withAlpha (0.25f + 0.75f * (1.f - a)));
+        if (a < 0.995f) glowLine (g, nt, cAmber.withAlpha (0.25f + 0.75f * (1.f - a)));
         juce::Path l, r;
         for (int i = 0; i <= 200; ++i)
         {
@@ -1254,7 +1338,7 @@ struct SignalWindow : juce::Component, juce::Timer
 
     String paintLayer (Graphics& g, Rect b)
     {
-        const Colour blue (0xff8fb8e8), amberC (0xffffb347);
+        const Colour blue (0xff8fb8e8), amberC (cAmber);
         const float mix = on ("voiceMixOn") ? P ("voiceMix") : 0.f;
         if (focusId == "voiceGlide" || focusId == "voiceCharacter")
         {
@@ -1312,9 +1396,9 @@ struct SignalWindow : juce::Component, juce::Timer
             if (i == 0) fc.startNewSubPath (x0 + slot * (hx - 0.5f), y); else fc.lineTo (x0 + slot * (hx - 0.5f), y);
         }
         dashed (g, fc, blue.withAlpha (0.7f), 1.2f);
-        g.setColour (Colour (0x33ff9a3a)); g.fillRect (x0, base, w, 1.f);
+        g.setColour (cGlow.withAlpha (0x33 / 255.f)); g.fillRect (x0, base, w, 1.f);
         tag (g, "GUITAR", b.getWidth() - 110.f, 14.f, amberC); tag (g, "VOICE", b.getWidth() - 56.f, 14.f, blue);
-        for (int k : { 1, 4, 8, 16 }) tag (g, String (k), x0 + slot * ((float) k - 0.6f), base + 9.f, Colour (0x88e89a45));
+        for (int k : { 1, 4, 8, 16 }) tag (g, String (k), x0 + slot * ((float) k - 0.6f), base + 9.f, cText.withAlpha (0x88 / 255.f));
         static const char* waves[9] = { "supersaw", "saw", "PWM", "square", "organ", "glass", "reed", "bowed pad", "bow" };
         if (focusId == "voiceTone") return "the voice's own filter: harmonics above " + tidyValue (String (tone), "Hz") + " are turned down";
         if (focusId == "voiceWave") return String ("the voice's harmonics: ") + waves[juce::jlimit (0, 8, wave)];
@@ -1348,7 +1432,7 @@ struct SignalWindow : juce::Component, juce::Timer
     String paintSpace (Graphics& g, Rect b)
     {
         const Plot pl = timeGrid (g, b);
-        const Colour sage (0xffb5d38c), amberC (0xffffb347);
+        const Colour sage (0xffb5d38c), amberC (cAmber);
         const float size = P ("smearSize"), L = P ("smearLevel"), T60 = 0.3f + 5.7f * size;
         const bool gate = on ("smearGate"), follows = juce::roundToInt (P ("smearSend")) == 1;
         const float holdS = P ("smearHold") * 0.001f, cutS = juce::jmax (0.002f, P ("smearCut") * 0.001f), tEnd = 0.9f;
@@ -1389,7 +1473,7 @@ struct SignalWindow : juce::Component, juce::Timer
         const bool amp = on ("fbAmp") && ! (P ("fbMode") > 0.5f);
         const float x0 = 40.f, x1 = b.getWidth() - 40.f, base = b.getHeight() - 42.f, top = 36.f;
         static const char* names[5] = { "NOTE", "OCTAVE", "12TH", "2 OCT", "2 OCT+3RD" };
-        g.setColour (Colour (0x33ff9a3a)); g.fillRect (x0 - 14.f, base, x1 - x0 + 28.f, 1.f);
+        g.setColour (cGlow.withAlpha (0x33 / 255.f)); g.fillRect (x0 - 14.f, base, x1 - x0 + 28.f, 1.f);
         for (int i = 0; i < 5; ++i)
         {
             const float x = x0 + (x1 - x0) * (float) i / 4.f, r = (float) (i + 1);
@@ -1400,7 +1484,7 @@ struct SignalWindow : juce::Component, juce::Timer
                 g.setColour (rust.withAlpha (0.25f)); g.fillRoundedRectangle (x - 14.f, base - w * (base - top) - 3.f, 28.f, w * (base - top) + 3.f, 4.f);
                 g.setColour (rust); g.fillRoundedRectangle (x - 10.f, base - w * (base - top), 20.f, w * (base - top), 3.f);
             }
-            g.setFont (monoFont (10.f)); g.setColour (Colour (0xcce89a45));
+            g.setFont (monoFont (10.f)); g.setColour (cText.withAlpha (0xcc / 255.f));
             g.drawText (names[i], Rect (x - 40.f, base + 4.f, 80.f, 12.f), juce::Justification::centred);
         }
         if (amp)
@@ -1424,11 +1508,11 @@ struct SignalWindow : juce::Component, juce::Timer
 
     void paintLive (Graphics& g, Rect b)
     {
-        const Rect lane (8.f, 16.f, b.getWidth() - 16.f, 84.f), env (8.f, 106.f, b.getWidth() - 16.f, 22.f);
+        const Rect lane (8.f, 14.f, b.getWidth() - 16.f, 76.f), env (8.f, 96.f, b.getWidth() - 16.f, 22.f);
         const float nowX = std::round (b.getWidth() * kNowFrac), dx = (nowX - lane.getX()) / (float) (kCols - 1);
         auto X = [&] (int age) { return nowX - (float) age * dx; };
         const int fut = (int) ((lane.getRight() - nowX) / dx);
-        const Colour amberC (0xffffb347), pale (0xfffff1cf), teal (0xff7fd1bd), rust (0xffff8a6a), blue (0xff8fb8e8), violet (0xffc4a6ec),
+        const Colour amberC (cAmber), pale (cPale), teal (0xff7fd1bd), rust (0xffff8a6a), blue (0xff8fb8e8), violet (0xffc4a6ec),
                      sage (0xffb5d38c), cream (0xffd8c3a2);
 
         // the open E strings as a faint grid
@@ -1436,8 +1520,8 @@ struct SignalWindow : juce::Component, juce::Timer
         for (int m : { 40, 52, 64, 76 })
         {
             const float y = yOfHz (hzOf ((float) m), lane);
-            g.setColour (Colour (0x14ff9a3a)); g.fillRect (lane.getX(), y, lane.getWidth(), 1.f);
-            g.setColour (Colour (0x66e89a45)); g.drawText (noteName ((float) m), Rect (lane.getRight() - 24.f, y - 10.f, 22.f, 10.f), juce::Justification::centredRight);
+            g.setColour (cGlow.withAlpha (0x14 / 255.f)); g.fillRect (lane.getX(), y, lane.getWidth(), 1.f);
+            g.setColour (cText.withAlpha (0x66 / 255.f)); g.drawText (noteName ((float) m), Rect (lane.getRight() - 24.f, y - 10.f, 22.f, 10.f), juce::Justification::centredRight);
         }
 
         // HOLD: the frozen notes as steady violet bands from the press on
@@ -1520,7 +1604,7 @@ struct SignalWindow : juce::Component, juce::Timer
             g.setGradientFill (juce::ColourGradient (sage.withAlpha (0.4f), t.x, t.y, sage.withAlpha (0.f), t.x + t.len, t.y, false));
             g.fillRect (t.x, t.y - t.th - 1.5f, t.len, 2.f * t.th + 3.f);
         }
-        g.setColour ((spaceOn ? sage : Colour (0xffff8a1f)).withAlpha (0.16f)); g.fillPath (glow);
+        g.setColour ((spaceOn ? sage : cGlow).withAlpha (0.16f)); g.fillPath (glow);
         for (int k = 0; k < 12; ++k)
         {
             const float dim = (float) (k % 3) / 2.f;
@@ -1552,11 +1636,11 @@ struct SignalWindow : juce::Component, juce::Timer
         }
 
         // "now"
-        for (float y = lane.getY() - 4.f; y < env.getBottom(); y += 5.f) { g.setColour (Colour (0x40ffc777)); g.fillRect (nowX, y, 1.f, 2.5f); }
+        for (float y = lane.getY() - 4.f; y < env.getBottom(); y += 5.f) { g.setColour (cTextHi.withAlpha (0x40 / 255.f)); g.fillRect (nowX, y, 1.f, 2.5f); }
 
         // the output level against the guitar's own; the latest note's swell continues dashed past "now"
         auto yDb = [&] (float db) { return env.getBottom() - juce::jlimit (0.f, 1.f, (db + 60.f) / 54.f) * env.getHeight(); };
-        g.setColour (Colour (0x1aff9a3a)); g.fillRect (env.getX(), env.getBottom(), env.getWidth(), 1.f);
+        g.setColour (cGlow.withAlpha (0x1a / 255.f)); g.fillRect (env.getX(), env.getBottom(), env.getWidth(), 1.f);
         juce::Path outP, inP;
         for (int age = kCols - 1; age >= 0; --age)
         {
@@ -1589,16 +1673,19 @@ struct SignalWindow : juce::Component, juce::Timer
         struct Item { const char* s; Colour c; bool lit; };
         const Item items[] = { { "SWELL", amberC, ! lastByp }, { "FILTER", teal, filterOn }, { "FEEDBACK", rust, fbOn },
                                { "LAYER", blue, layerOn }, { "HOLD", violet, hl > 0.f }, { "SPACE", sage, spaceOn } };
-        const auto lf = uiFont (10.f, true, 0.1f);
+        const auto lf = uiFont (9.f, true, 0.06f);
         g.setFont (lf);
-        float lx = 12.f; const float ly = b.getHeight() - 11.f;
+        float tw = 0.f;
+        for (auto& it : items) tw += juce::GlyphArrangement::getStringWidth (lf, it.s) + 8.f;
+        const float gapL = juce::jmax (4.f, (b.getWidth() - 20.f - tw) / 5.f);   // spread across the glass
+        float lx = 10.f; const float ly = b.getHeight() - 11.f;
         for (auto& it : items)
         {
             const float a = it.lit ? 1.f : 0.28f;
             g.setColour (it.c.withAlpha (a)); g.fillEllipse (lx, ly - 2.5f, 5.f, 5.f);
             const float w = juce::GlyphArrangement::getStringWidth (lf, it.s);
             g.drawText (it.s, Rect (lx + 8.f, ly - 6.f, w + 4.f, 12.f), juce::Justification::centredLeft);
-            lx += w + 22.f;
+            lx += w + 8.f + gapL;
         }
 
         // input level, with the zone where the tracking works best
@@ -1609,7 +1696,7 @@ struct SignalWindow : juce::Component, juce::Timer
         g.setColour (meterDb > -3.f ? rust : meterDb < -30.f ? amberC.withAlpha (0.55f) : amberC);
         if (meterDb > -60.f) g.fillRect (mx0, my, mX (meterDb) - mx0, 4.f);
         if (peakDb > -60.f) { g.setColour (pale); g.fillRect (mX (peakDb) - 0.5f, my - 1.f, 1.5f, 6.f); }
-        tag (g, peakDb > -3.f ? "HOT" : "IN", mx0 - 4.f, my + 2.f, (peakDb > -3.f ? rust : Colour (0x99e89a45)), juce::Justification::centredRight);
+        tag (g, peakDb > -3.f ? "HOT" : "IN", mx0 - 4.f, my + 2.f, (peakDb > -3.f ? rust : cText.withAlpha (0x99 / 255.f)), juce::Justification::centredRight);
     }
 
     void paint (Graphics& g) override
@@ -1617,7 +1704,7 @@ struct SignalWindow : juce::Component, juce::Timer
         const auto b = getLocalBounds().toFloat();
         juce::Path clip; clip.addRoundedRectangle (b, 5.f);
         g.reduceClipRegion (clip);
-        g.setGradientFill (juce::ColourGradient (Colour (0xff3a1a08), b.getCentreX(), b.getHeight() * 0.55f, Colour (0xff0c0503), 0.f, 0.f, true));
+        g.setGradientFill (juce::ColourGradient (cGlass1, b.getCentreX(), b.getHeight() * 0.55f, cGlass2, 0.f, 0.f, true));
         g.fillAll();
         if (lastHold > 0.f) { g.setColour (Colour (0xffc4a6ec).withAlpha (0.05f * lastHold)); g.fillAll(); }
 
@@ -1632,7 +1719,7 @@ struct SignalWindow : juce::Component, juce::Timer
         if (viewA > 0.01f && kind != 0)
         {
             g.beginTransparencyLayer (viewA);
-            String says; Colour tc (0xffffc777);
+            String says; Colour tc (cTextHi);
             switch (kind)
             {
                 case 1:  says = paintSwell (g, b); break;
@@ -1650,7 +1737,7 @@ struct SignalWindow : juce::Component, juce::Timer
             g.setColour (tc);
             g.drawText (roName + "  " + roValue, b.reduced (12, 7), juce::Justification::topLeft);
             g.setFont (uiFont (12.f, false, 0.03f));
-            g.setColour (Colour (0xffe9c79a));
+            g.setColour (cCaption);
             g.drawText (says, b.reduced (12, 5), juce::Justification::bottomRight);
             g.endTransparencyLayer();
         }
@@ -1660,7 +1747,7 @@ struct SignalWindow : juce::Component, juce::Timer
             g.setFont (monoFont (12.f));
             const float w = juce::GlyphArrangement::getStringWidth (g.getCurrentFont(), s) + 12.f;
             g.setColour (juce::Colours::black.withAlpha (0.6f * juce::jmin (1.f, (float) roTicks / 10.f))); g.fillRoundedRectangle (8.f, 5.f, w, 15.f, 3.f);
-            g.setColour (Colour (0xffffc777).withAlpha (juce::jmin (1.f, (float) roTicks / 10.f)));
+            g.setColour (cTextHi.withAlpha (juce::jmin (1.f, (float) roTicks / 10.f)));
             g.drawText (s, Rect (14.f, 5.f, w, 15.f), juce::Justification::centredLeft);
         }
 
@@ -1675,7 +1762,7 @@ struct SignalWindow : juce::Component, juce::Timer
         if (lastByp)
         {
             g.setColour (juce::Colours::black.withAlpha (0.5f)); g.fillAll();
-            g.setFont (monoFont (13.f)); g.setColour (Colour (0xffe89a45));
+            g.setFont (monoFont (13.f)); g.setColour (cText);
             g.drawText ("BYPASSED", b, juce::Justification::centred);
         }
     }
@@ -1738,12 +1825,13 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         addAndMakeVisible (drawer);
         drawer.setBounds (juce::roundToInt (kPedalX + kPedalW), juce::roundToInt (kPedalY + 236), 16, 180);
         drawer.onClick = [this] { editor.setPanelOpen (! proc.uiPedalsOpen); };
-        window.setBounds (juce::roundToInt (kPedalX + 28), juce::roundToInt (kPedalY + 30), 336, 152);
+        window.setBounds (juce::roundToInt (kPedalX + 43), juce::roundToInt (kPedalY + 35), 309, 143);   // in the plate's window glass
 
         buildBar();
         buildPedal();
         buildPanel();
         setPanelVisible (proc.uiPedalsOpen);
+        applySkin (proc.uiSkin);
         startTimerHz (15);
     }
     ~Board() override { setLookAndFeel (nullptr); }
@@ -1790,9 +1878,20 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
     float getParam (const char* id) const { return proc.apvts.getRawParameterValue (id)->load(); }
 
     // ---- building blocks
-    struct Text { String s; Rect r; float size; Colour c; juce::Justification j; bool bold; float track; };
+    struct Text { String s; Rect r; float size; Colour c; juce::Justification j; bool bold; float track; bool onPedal; };
     void label (const String& s, Rect r, float size, Colour c, juce::Justification j = juce::Justification::centred, bool bold = true, float track = 0.14f)
-    { texts.push_back ({ s, r, size, c, j, bold, track }); }
+    { texts.push_back ({ s, r, size, c, j, bold, track, r.getX() < kPedalX + kPedalW }); }   // on the pedal: printed in the skin's ink
+
+    void applySkin (int index)
+    {
+        proc.uiSkin = juce::jlimit (0, 2, index);
+        currentSkin = &skinAt (proc.uiSkin);
+        look.skin = currentSkin;
+        window.setSkin (*currentSkin);
+        bg = {};
+        repaint();
+        for (auto* c : getChildren()) c->repaint();
+    }
 
     Knob* knob (const char* id, const String& name, int kind, float cx, float cy, Colour ac, juce::Array<juce::Component*>& group, int size = 0)
     {
@@ -1846,6 +1945,10 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         saveC->mode = Chip::toggle; saveC->litFn = [] { return false; };
         saveC->setSize (saveC->idealWidth(), 22);
         saveC->onPress = [this] { savePreset(); };
+        skinC = chip (Chip::custom, "", "SKIN", col::amber, "Skin: the pedal's plate and colours (Sunburst, Lagoon, Midnight).", barOnly);
+        skinC->textFn = [this] { return "SKIN " + String (skinAt (proc.uiSkin).name).toUpperCase(); };
+        skinC->setSize (128, 22);
+        skinC->onPress = [this] { skinMenu (skinC); };
         for (int i = 0; i < 2; ++i)
         {
             auto* c = chip (Chip::custom, "", i == 0 ? "A" : "B", col::amber, "A / B: two versions of the sound to compare. Click the other one to switch.", barOnly);
@@ -1873,6 +1976,7 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
             redoB.setBounds (right - 98, y - 3, 28, 28);
             undoB.setBounds (right - 130, y - 3, 28, 28);
             abC[1]->setTopLeftPosition (right - 168, y); abC[0]->setTopLeftPosition (right - 196, y);
+            skinC->setTopLeftPosition (right - 196 - 10 - skinC->getWidth(), y);
             saveC->setTopLeftPosition (54 + lcdW + 44, y);
         }
     }
@@ -1882,28 +1986,28 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
     {
         juce::Array<juce::Component*> g;   // the pedal's controls are always visible
         const float px = kPedalX, py = kPedalY;
+        // laid out inside the plate's printed frame (x 20..373, y 14..625), as in the approved mockup
         // row 1: how the notes swell in, how long they ring, the tone
-        const float bx[3] = { 72.f, 196.f, 320.f };
-        const int bsz[3] = { 124, 100, 124 };
+        const float bx[3] = { 84.f, 196.f, 308.f };
+        const int bsz[3] = { 119, 100, 119 };
         const char* bid[3] = { "attack", "sustain", "freq" }; const char* bn[3] = { "ATTACK", "SUSTAIN", "TONE" };
         for (int i = 0; i < 3; ++i)
         {
-            knob (bid[i], bn[i], 0, px + bx[i], py + 276, col::amber, g, bsz[i]);
-            label (bn[i], { px + bx[i] - 60, py + (i == 1 ? 321.f : 330.f), 120, 16 }, i == 1 ? 12.5f : 13.5f, col::ink, juce::Justification::centred, true, 0.18f);
+            knob (bid[i], bn[i], 0, px + bx[i], py + 266, col::amber, g, bsz[i]);
+            label (bn[i], { px + bx[i] - 60, py + (i == 1 ? 311.f : 321.f), 120, 16 }, i == 1 ? 12.f : 13.f, col::ink, juce::Justification::centred, true, 0.18f);
         }
         // row 2 in two printed groups: how the swell follows your playing | what comes out
-        struct Grp { const char* title; float x, w; std::vector<std::pair<const char*, const char*>> ks; };
-        const Grp groups[2] = { { "PLAYING", 22.f, 174.f, { { "touch", "FEEL" }, { "follow", "PACE" }, { "even", "EVEN" } } },
-                                { "OUTPUT", 254.f, 116.f, { { "dry", "DRY" }, { "vol", "LEVEL" } } } };
+        struct Grp { const char* title; float x, w; std::vector<std::pair<const char*, const char*>> ks; std::vector<float> xs; };
+        const Grp groups[2] = { { "PLAYING", 30.f, 168.f, { { "touch", "FEEL" }, { "follow", "PACE" }, { "even", "EVEN" } }, { 60.f, 114.f, 168.f } },
+                                { "OUTPUT", 226.f, 136.f, { { "dry", "DRY" }, { "vol", "LEVEL" } }, { 266.f, 324.f } } };
         for (auto& gr : groups)
         {
-            pedalGroups.push_back ({ gr.title, Rect (px + gr.x, py + 356.f, gr.w, 84.f) });
-            const float step = gr.w / (float) gr.ks.size();
+            pedalGroups.push_back ({ gr.title, Rect (px + gr.x, py + 356.f, gr.w, 80.f) });
             for (size_t i = 0; i < gr.ks.size(); ++i)
             {
-                const float cx = px + gr.x + step * ((float) i + 0.5f);
-                knob (gr.ks[i].first, gr.ks[i].second, 1, cx, py + 392.f, col::amber, g);
-                label (gr.ks[i].second, { cx - 40.f, py + 420.f, 80.f, 13.f }, 10.5f, col::ink2, juce::Justification::centred, true, 0.12f);
+                const float cx = px + gr.xs[i];
+                knob (gr.ks[i].first, gr.ks[i].second, 1, cx, py + 388.f, col::amber, g, 78);
+                label (gr.ks[i].second, { cx - 40.f, py + 422.f, 80.f, 13.f }, 10.f, col::ink, juce::Justification::centred, true, 0.16f);
             }
         }
 
@@ -1930,28 +2034,30 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         auto* match = chip (Chip::toggle, "levelMatch", "MATCH", col::amber,
                             "MATCH: a long swell ends as loud as the pick was. Off: slow swells come out quieter, as on the pedal.", g);
         const float total = (float) (shape->getWidth() + match->getWidth() + sync->getWidth()) + 16.f;
-        flow ({ shape, match, sync }, px + (kPedalW - total) * 0.5f, py + 197, 8.f);
+        flow ({ shape, match, sync }, px + (kPedalW - total) * 0.5f, py + 192, 8.f);
+        for (auto* c : { shape, match, sync }) { c->pedalSkin = &currentSkin; c->setSize (c->getWidth() + 6, 22); }
 
         addAndMakeVisible (onLed); addAndMakeVisible (holdLed);
-        onLed.setBounds (juce::roundToInt (px + 108 - 14), juce::roundToInt (py + 533), 28, 22);
-        holdLed.setBounds (juce::roundToInt (px + 284 - 14), juce::roundToInt (py + 533), 28, 22);
+        onLed.setBounds (juce::roundToInt (px + 97), juce::roundToInt (py + 556), 28, 22);
+        holdLed.setBounds (juce::roundToInt (px + 257), juce::roundToInt (py + 556), 28, 22);
+        onLed.pedalSkin = &currentSkin; holdLed.pedalSkin = &currentSkin;
         addAndMakeVisible (onSw); addAndMakeVisible (holdSw);
-        onSw.setBounds (juce::roundToInt (px + 108 - 44), juce::roundToInt (py + 550), 88, 80);
-        holdSw.setBounds (juce::roundToInt (px + 284 - 44), juce::roundToInt (py + 550), 88, 80);
+        onSw.setBounds (juce::roundToInt (px + 33), juce::roundToInt (py + 550), 70, 70);
+        holdSw.setBounds (juce::roundToInt (px + 289), juce::roundToInt (py + 550), 70, 70);
         onSw.setTooltip ("ON: switches the pedal in or out (bypass). Right-click: MIDI learn (a footswitch on your controller).");
         holdSw.setTooltip ("HOLD: freezes what is ringing into a pad you can play over. Right-click: MIDI learn.");
         onSw.onMenu = [this] { midiMenu ("bypass", onSw); };
         // HOLD's own two settings, small, right beside its footswitch (LATCH: right-click the footswitch)
-        knob ("holdFade", "FADE", 1, px + 224.f, py + 566.f, col::amber, g, 44);
-        knob ("holdLevel", "LEVEL", 1, px + 224.f, py + 612.f, col::amber, g, 44);
-        label ("FADE", { px + 158.f, py + 560.f, 46.f, 12.f }, 9.5f, col::ink2, juce::Justification::centredRight, true, 0.12f);
-        label ("LEVEL", { px + 158.f, py + 606.f, 46.f, 12.f }, 9.5f, col::ink2, juce::Justification::centredRight, true, 0.12f);
+        knob ("holdFade", "FADE", 1, px + 166.f, py + 580.f, col::amber, g, 64);
+        knob ("holdLevel", "LEVEL", 1, px + 214.f, py + 580.f, col::amber, g, 64);
+        label ("FADE", { px + 141.f, py + 607.f, 50.f, 12.f }, 9.f, col::ink, juce::Justification::centred, true, 0.14f);
+        label ("LEVEL", { px + 189.f, py + 607.f, 50.f, 12.f }, 9.f, col::ink, juce::Justification::centred, true, 0.14f);
         holdSw.onMenu = [this] { midiMenu ("holdOn", holdSw); };
         onSw.onDown = [this] { setParam ("bypass", getParam ("bypass") > 0.5f ? 0.f : 1.f); };
         holdSw.onDown = [this] { setParam ("holdOn", getParam ("holdLatch") > 0.5f ? (getParam ("holdOn") > 0.5f ? 0.f : 1.f) : 1.f); };
         holdSw.onUp = [this] { if (getParam ("holdLatch") < 0.5f) setParam ("holdOn", 0.f); };
-        label ("ON", { px + 108 - 40, py + 624, 80, 16 }, 13.5f, col::ink, juce::Justification::centred, true, 0.18f);
-        label ("HOLD", { px + 284 - 40, py + 624, 80, 16 }, 13.5f, col::ink, juce::Justification::centred, true, 0.18f);
+        label ("ON", { px + 104, py + 576, 40, 14 }, 12.f, col::ink, juce::Justification::centredLeft, true, 0.18f);
+        label ("HOLD", { px + 247, py + 576, 46, 14 }, 12.f, col::ink, juce::Justification::centredLeft, true, 0.18f);
     }
 
     // ---- panel
@@ -2176,6 +2282,14 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         });
     }
 
+    void skinMenu (juce::Component* target)
+    {
+        juce::PopupMenu m;
+        for (int i = 0; i < 3; ++i) m.addItem (1 + i, skinAt (i).name, true, proc.uiSkin == i);
+        m.setLookAndFeel (&look);
+        m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (target), [this] (int r) { if (r > 0) applySkin (r - 1); });
+    }
+
     void settingsMenu()
     {
         juce::PopupMenu m, midi, size;
@@ -2216,11 +2330,15 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         for (int i = 0; i < 5; ++i) size.addItem (40 + i, String (juce::roundToInt (sizes[i] * 100)) + " %", true, std::abs (proc.uiScale - sizes[i]) < 0.01f);
         m.addSubMenu ("Size", size);
         m.addItem (4, panelOpen ? "Hide the effects panel" : "Show the effects panel");
+        juce::PopupMenu skinM;
+        for (int i = 0; i < 3; ++i) skinM.addItem (380 + i, skinAt (i).name, true, proc.uiSkin == i);
+        m.addSubMenu ("Skin", skinM);
         m.setLookAndFeel (&look);
         m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&gearB), [this, sizes] (int r)
         {
             auto flip = [this] (const char* id) { setParam (id, getParam (id) > 0.5f ? 0.f : 1.f); };
-            if (r >= 360 && r < 366) setParam ("detune", cents[r - 360]);
+            if (r >= 380 && r < 383) applySkin (r - 380);
+            else if (r >= 360 && r < 366) setParam ("detune", cents[r - 360]);
             else if (r >= 340 && r < 345) setParam ("sustainMax", (float) maxes[r - 340]);
             else if (r >= 320 && r < 330) setParam ("fbHarmonic", (float) (r - 320));
             else if (r >= 300 && r < 310) setParam ("slope", (float) (r - 300));
@@ -2292,68 +2410,27 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         g.setGradientFill (juce::ColourGradient (Colour (0xff2a211c), (float) getWidth() * 0.3f, 0.f, Colour (0xff120e0c), (float) getWidth() * 0.3f, (float) getHeight() * 1.1f, true));
         g.fillAll();
 
-        // --- pedal enclosure
+        // --- the pedal: the skin's plate (the owner's worn enclosure), the printed groups and the logo
         const Rect pr (kPedalX, kPedalY, kPedalW, kPedalH);
+        const Skin& sk = currentSkin != nullptr ? *currentSkin : skinAt (0);
         juce::Path pedal; pedal.addRoundedRectangle (pr, 24.f);
         juce::DropShadow (juce::Colours::black.withAlpha (0.8f), 30, { 0, 16 }).drawForPath (g, pedal);
         juce::DropShadow (juce::Colours::black.withAlpha (0.6f), 6, { 0, 3 }).drawForPath (g, pedal);
-        g.setGradientFill (juce::ColourGradient (col::body1, pr.getX(), pr.getY(), col::body2, pr.getRight(), pr.getBottom(), false));
-        g.fillPath (pedal);
         {
             Graphics::ScopedSaveState ss (g);
             g.reduceClipRegion (pedal);
-            g.setTiledImageFill (grain, 0, 0, 1.f); g.fillRect (pr);      // powder coat
-            g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.14f), pr.getX(), pr.getY(), juce::Colours::transparentWhite, pr.getX() + pr.getWidth() * 0.75f, pr.getY() + pr.getHeight() * 0.42f, false));
-            g.fillRect (pr);
-            g.setGradientFill (juce::ColourGradient (juce::Colours::transparentBlack, 0, pr.getBottom() - 40, juce::Colours::black.withAlpha (0.3f), 0, pr.getBottom(), false));
-            g.fillRect (pr);
+            g.drawImage (sk.plateImg(), pr, juce::RectanglePlacement::stretchToFit);
         }
-        g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.3f), 0, pr.getY(), juce::Colours::black.withAlpha (0.35f), 0, pr.getBottom(), false));
-        g.drawRoundedRectangle (pr.reduced (0.75f), 23.5f, 1.5f);
-
-        const float sxy[4][2] = { { 15, 15 }, { kPedalW - 15, 15 }, { 15, kPedalH - 15 }, { kPedalW - 15, kPedalH - 15 } };
-        for (int i = 0; i < 4; ++i)
-        {
-            const float cx = pr.getX() + sxy[i][0], cy = pr.getY() + sxy[i][1], a = 0.6f + (float) i * 1.1f;
-            g.setColour (juce::Colours::black.withAlpha (0.55f)); g.fillEllipse (cx - 7.5f, cy - 6.5f, 15, 15);
-            g.setGradientFill (juce::ColourGradient (Colour (0xfff2efe8), cx - 3, cy - 5, Colour (0xff6b6864), cx + 4, cy + 6, false));
-            g.fillEllipse (cx - 6.5f, cy - 6.5f, 13, 13);
-            g.setColour (Colour (0xff2b2826));
-            g.drawLine (cx - std::cos (a) * 4.5f, cy - std::sin (a) * 4.5f, cx + std::cos (a) * 4.5f, cy + std::sin (a) * 4.5f, 2.f);
-        }
-
-        // window bezel
-        const Rect wr (pr.getX() + 20, pr.getY() + 22, 352, 168);
-        g.setColour (juce::Colours::white.withAlpha (0.2f)); g.fillRoundedRectangle (wr.translated (0, 1.2f), 10.f);
-        g.setColour (juce::Colours::black.withAlpha (0.5f)); g.fillRoundedRectangle (wr.translated (0, -1.f), 10.f);
-        g.setColour (Colour (0xff0a0705)); g.fillRoundedRectangle (wr, 10.f);
-        g.setColour (Colour (0xff1d1714)); g.drawRoundedRectangle (wr.reduced (1.5f), 9.f, 2.f);
-        g.setColour (juce::Colours::white.withAlpha (0.06f)); g.drawRoundedRectangle (wr.reduced (3.f), 8.f, 1.f);
-
-        // the three groups of small knobs
         for (auto& gr : pedalGroups)
         {
-            g.setColour (col::ink.withAlpha (0.26f)); g.drawRoundedRectangle (gr.second, 8.f, 1.f);
-            const auto f = uiFont (9.5f, true, 0.3f);
-            const float tw = juce::GlyphArrangement::getStringWidth (f, gr.first) + 14.f;
+            g.setColour (sk.frame2); g.drawRoundedRectangle (gr.second, gr.second.getHeight() * 0.5f, 1.5f);
+            const auto f = uiFont (10.f, true, 0.18f);
+            const float tw = juce::GlyphArrangement::getStringWidth (f, gr.first) + 18.f;
             const Rect tab (gr.second.getCentreX() - tw * 0.5f, gr.second.getY() - 7.f, tw, 14.f);
-            g.setColour (Colour (0xff2a0a0d)); g.fillRoundedRectangle (tab, 4.f);
-            g.setColour (col::ink.withAlpha (0.3f)); g.drawRoundedRectangle (tab, 4.f, 1.f);
-            g.setFont (f); g.setColour (col::ink2); g.drawText (gr.first, tab.translated (1.5f, 0.f), juce::Justification::centred);
+            g.setColour (sk.ink); g.fillRoundedRectangle (tab, 7.f);
+            g.setFont (f); g.setColour (sk.body1); g.drawText (gr.first, tab.translated (1.5f, 0.f), juce::Justification::centred);
         }
-
-        // name plate
-        g.setColour (col::ink.withAlpha (0.35f));
-        g.fillRect (pr.getX() + 34, pr.getY() + 447, pr.getWidth() - 68, 1.f);
-        g.fillRect (pr.getX() + 34, pr.getY() + 529, pr.getWidth() - 68, 1.f);
-        g.setColour (col::ink);
-        g.setFont (uiFont (11.5f, true, 0.5f));
-        g.drawText ("BENNO", Rect (pr.getX(), pr.getY() + 452, pr.getWidth(), 14).translated (3, 0), juce::Justification::centred);
-        g.setColour (col::ink.withAlpha (0.5f));      // unlit: printed on the enclosure; the lit version is drawn over it
-        drawWordmark (g);
-        g.setColour (col::ink2);
-        g.setFont (uiFont (10.5f, false, 0.3f));
-        g.drawText ("POLYPHONIC SWELL AND SUSTAIN", Rect (pr.getX(), pr.getY() + 512, pr.getWidth(), 13).translated (2, 0), juce::Justification::centred);
+        g.drawImage (sk.logoImg(), Rect (pr.getX() + 71, pr.getY() + 442, 250, 109), juce::RectanglePlacement::centred);
 
         // --- panel plate and its six modules
         if (panelOpen)
@@ -2399,7 +2476,7 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         {
             if (! panelOpen && t.r.getX() >= kPanelX) continue;
             g.setFont (uiFont (t.size, t.bold, t.track));
-            g.setColour (t.c);
+            g.setColour (t.onPedal && currentSkin != nullptr ? currentSkin->ink : t.c);
             g.drawFittedText (t.s, t.r.toNearestInt(), t.j, 2, 0.9f);
         }
     }
@@ -2449,10 +2526,9 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
     void paint (Graphics& g) override
     {
         const float ps = g.getInternalContext().getPhysicalPixelScaleFactor();
-        if (! bg.isValid() || std::abs (ps - bakedScale) > 0.001f) { bake (ps); bakeGlow (ps); }
+        if (! bg.isValid() || std::abs (ps - bakedScale) > 0.001f) bake (ps);
         g.setImageResamplingQuality (Graphics::highResamplingQuality);
         g.drawImage (bg, getLocalBounds().toFloat());
-        if (! (offMask & 128)) g.drawImage (glow, glowRect());
     }
 
     void paintOverChildren (Graphics& g) override
@@ -2468,11 +2544,12 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
                 }
         if (offMask & 64)   // FILTER off: TONE does nothing
         {
-            g.setColour (col::body2.withAlpha (0.6f));
-            g.fillEllipse (kPedalX + 320 - 46, kPedalY + 276 - 46, 92, 92);
-            g.setColour (col::ink2);
-            g.setFont (uiFont (10.5f, true, 0.12f));
-            g.drawText ("FILTER IS OFF", Rect (kPedalX + 320 - 60, kPedalY + 276 - 8, 120, 16), juce::Justification::centred);
+            const Skin& sk = currentSkin != nullptr ? *currentSkin : skinAt (0);
+            g.setColour (sk.ink.withAlpha (0.55f));
+            g.fillEllipse (kPedalX + 308 - 38, kPedalY + 266 - 38, 76, 76);
+            g.setColour (sk.body1);
+            g.setFont (uiFont (10.f, true, 0.12f));
+            g.drawText ("FILTER OFF", Rect (kPedalX + 308 - 60, kPedalY + 266 - 8, 120, 16), juce::Justification::centred);
         }
     }
 
@@ -2491,7 +2568,8 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
                gearB { IconButton::gear, "Settings: re-pick, limiter, low latency, MIDI out, window size" },
                panelB { IconButton::panel, "Show or hide the effects panel" };
     Lcd lcd;
-    Chip* saveC = nullptr; Chip* abC[2] { nullptr, nullptr }; Chip* bodyC = nullptr;
+    Chip* saveC = nullptr; Chip* skinC = nullptr;
+    const Skin* currentSkin = nullptr; Chip* abC[2] { nullptr, nullptr }; Chip* bodyC = nullptr;
     Led onLed { proc, "bypass", true, "Lit while the pedal is on." }, holdLed { proc, "holdOn", false, "Lit while a pad is held." };
     FootSwitch onSw, holdSw;
     DrawerTab drawer;
@@ -2541,6 +2619,8 @@ void PolySwellEditor::setPanelOpen (bool open)
 }
 
 void PolySwellEditor::showKnobView (const juce::String& paramId, bool on) { board->showKnobView (paramId, on); }
+
+void PolySwellEditor::setSkin (int index) { board->applySkin (index); }
 
 void PolySwellEditor::setUiScale (float scale)
 {

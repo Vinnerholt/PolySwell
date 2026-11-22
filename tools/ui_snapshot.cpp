@@ -314,6 +314,12 @@ int main (int argc, char** argv)
     setParam (proc, "filterOn", 1.f); setParam (proc, "voiceOn", 1.f);
     pump (300);
     shoot (e, out.getChildFile ("5_size_150.png"));
+    if (pe != nullptr)
+    {
+        pe->setUiScale (1.f);
+        for (int sk = 0; sk < 3; ++sk) { pe->setSkin (sk); pump (300); shoot (e, out.getChildFile ("skin_" + juce::String (sk) + ".png")); }
+        pe->setSkin (0);
+    }
 
     // the window explaining a knob (as when the mouse is over it)
     if (pe != nullptr)

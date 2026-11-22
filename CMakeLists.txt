@@ -27,7 +27,10 @@ juce_add_plugin(PolySwell
 # violin body IRs (owner-supplied), embedded: BinaryData::violin_*_wav
 juce_add_binary_data(PolySwellData SOURCES
     resources/ir/violin_a.wav resources/ir/violin_en.wav resources/ir/violin_eu.wav resources/ir/violin_g1.wav
-    resources/ir/violin_g2.wav resources/ir/violin_s1.wav resources/ir/violin_s2.wav)
+    resources/ir/violin_g2.wav resources/ir/violin_s1.wav resources/ir/violin_s2.wav
+    resources/skin/plate_sunburst.png resources/skin/plate_lagoon.png resources/skin/plate_midnight.png
+    resources/skin/logo_sunburst.png resources/skin/logo_lagoon.png resources/skin/logo_midnight.png
+    resources/skin/footswitch.png)
 
 target_sources(PolySwell PRIVATE
     Source/PluginProcessor.cpp

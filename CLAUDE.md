@@ -157,3 +157,13 @@ within ~2 dB, plucks within ~4 dB (the POG2 holds a pluck a little longer), detu
   830 Hz, 3.5 kHz, 12 kHz). Saved sessions keep their values (the state stores plain values). `ui_snapshot --tapers`
   prints them.
 
+
+## Skins (2026-11-22)
+The pedal follows the owner's 70s/80s inspiration image (approved mockup: the Design canvas
+https://claude.ai/artifact/EZmkrUJoXqKFvVsBdjZ8Yd, Pedal.dc.html). `resources/skin/` (BinaryData): the worn plate per skin
+(`plate_*.png`, 617x1024 = the 392x646 pedal), the exact logo per skin (`logo_*.png`) and the owner's footswitch photo.
+`Skin` / `skinAt()` in PluginEditor.cpp: Sunburst (orange, default), Lagoon (turquoise / blue / purple on cream),
+Midnight (the same on navy). A skin sets plate, logo, ink, the knobs' three ring colours, LED tint, the pedal chips and the
+window's glow (`SignalWindow::setSkin`; the effects' own colours stay). Pedal knobs (kinds 0/1) are ivory with three value
+rings (outer = lightest). Switch: SKIN chip in the top bar or gear > Skin; saved as `uiSkin` in the state.
+`ui_snapshot` writes `skin_0..2.png`. The effects panel keeps its dark look.
