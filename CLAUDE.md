@@ -222,7 +222,7 @@ rings (outer = lightest). Switch: SKIN chip in the top bar or gear > Skin; saved
   Measured: with only DRY OUTPUT up and ATTACK at 0 the POG2 is unity (1.00); the gain grows with its ATTACK (+2.2 dB at
   1/4, +5.9 at 1/2, +8.3 at 3/4). Only the curve shape is modelled now; MATCH is the per-note "back to pick level".
   Test 36 checks there is no gain. Presets POG2 swell (+8.5 dB LEVEL) and Warm pad (+4.5) rebalanced (`--peaks`).
-- Fourth skin Sunburst Night (`kNumSkins`): charcoal plate (`plate_night.png`, cream paint -> #221e1a), the Sunburst
+- Fourth skin Sunburst Night (`kNumSkins`; black knob faces with cream pointers via `Skin::face*`/`pointer`): charcoal plate (`plate_night.png`, cream paint -> #221e1a), the Sunburst
   logo with cream lettering (`logo_night.png`), cream ink, Sunburst rings and glow.
 - MATCH on the pedal: a mini bat toggle (`MiniToggle`, lever up = on) right of the ON footswitch, mirroring the LED;
   right-click = MIDI learn; still in gear > Swell curve too. MATCH is ON by default (param default + `defaultSetup()`):

@@ -47,6 +47,7 @@ struct Skin
     Colour ink, body1, frame2, accent, onAccent, led;
     Colour rings[3];
     Colour glass1, glass2, glow, amber, pale, text, textHi;
+    Colour faceHi { 0xfffffaf0 }, faceMid { 0xffece2cb }, faceLo { 0xffc9bc9d }, pointer { 0xff2a231b };   // the pedal knobs (ivory)
     juce::Image plateImg() const { return juce::ImageCache::getFromMemory (plate, plateSize); }
     juce::Image logoImg() const  { return juce::ImageCache::getFromMemory (logo, logoSize); }
 };
@@ -69,7 +70,8 @@ const Skin& skinAt (int i)
         { "Sunburst Night", BinaryData::plate_night_png, BinaryData::plate_night_pngSize, BinaryData::logo_night_png, BinaryData::logo_night_pngSize,
           Colour (0xffefe5cb), Colour (0xff1c1916), Colour (0x47efe5cb), Colour (0xffd9732f), Colour (0xfffff4df), Colour (0xffffb030),
           { Colour (0xffe09a45), Colour (0xffd9732f), Colour (0xffbc4320) },
-          Colour (0xff3a1a08), Colour (0xff0c0503), Colour (0xffff8a1f), Colour (0xffffb347), Colour (0xfffff1cf), Colour (0xffe89a45), Colour (0xffffc777) } };
+          Colour (0xff3a1a08), Colour (0xff0c0503), Colour (0xffff8a1f), Colour (0xffffb347), Colour (0xfffff1cf), Colour (0xffe89a45), Colour (0xffffc777),
+          Colour (0xff5a534c), Colour (0xff35302b), Colour (0xff17140f), Colour (0xffefe5cb) } };   // black knobs, cream pointers
     return s[juce::jlimit (0, kNumSkins - 1, i)];
 }
 
@@ -334,13 +336,13 @@ struct Look : juce::LookAndFeel_V4
             }
             juce::Path face; face.addEllipse (c - R, cy - R, 2 * R, 2 * R);
             juce::DropShadow (juce::Colours::black.withAlpha (0.45f), juce::jmax (2, juce::roundToInt (R * 0.18f)), { 0, juce::jmax (1, juce::roundToInt (R * 0.09f)) }).drawForPath (g, face);
-            juce::ColourGradient fg (Colour (0xfffffaf0), c - R * 0.24f, cy - R * 0.4f, Colour (0xffc9bc9d), c + R * 0.6f, cy + R * 0.9f, true);
-            fg.addColour (0.55, Colour (0xffece2cb));
+            juce::ColourGradient fg (skin->faceHi, c - R * 0.24f, cy - R * 0.4f, skin->faceLo, c + R * 0.6f, cy + R * 0.9f, true);
+            fg.addColour (0.55, skin->faceMid);
             g.setGradientFill (fg); g.fillPath (face);
             g.setColour (juce::Colours::black.withAlpha (0.28f)); g.strokePath (face, juce::PathStrokeType (1.f));
             g.setColour (Colour (0x1f3c2814)); g.drawEllipse (c - R * 0.8f, cy - R * 0.8f, R * 1.6f, R * 1.6f, 1.2f);
             const float sn = std::sin (a), cs = -std::cos (a);
-            g.setColour (Colour (0xff2a231b));
+            g.setColour (skin->pointer);
             g.drawLine (juce::Line<float> (c + sn * R * 0.25f, cy + cs * R * 0.25f, c + sn * R * 0.86f, cy + cs * R * 0.86f), R > 25.f ? 4.5f : R > 16.f ? 3.5f : 2.6f);
             return;
         }
@@ -2379,7 +2381,8 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         label ("ON", { px + 128 - 20, py + 592, 40, 14 }, 12.f, col::ink, juce::Justification::centred, true, 0.18f);
         // MATCH: a mini toggle mirroring the LED on the other side of the footswitch
         matchSw = std::make_unique<MiniToggle> (proc, "levelMatch");
-        matchSw->setTooltip ("MATCH: each note's swell ends as loud as its pick (up = on). Off: the note keeps the string's own fade, so looser playing stays quieter. Right-click: MIDI learn.");
+        matchSw->setTooltip ("MATCH: each note's swell ends as loud as its pick (up = on, the default). Off: the note keeps the string's own fade, so looser playing stays quieter. "
+                             "The POG2 has no such switch: its built-in gain always brings plucks back to about their pick level, which is MATCH on. Right-click: MIDI learn.");
         matchSw->onMenu = [this] { midiMenu ("levelMatch", *matchSw); };
         matchSw->setBounds (juce::roundToInt (px + 264 - 16), juce::roundToInt (py + 572 - 20), 32, 40);
         addAndMakeVisible (*matchSw);
