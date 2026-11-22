@@ -48,19 +48,19 @@ namespace
     const std::vector<NewPreset>& newPresets()
     {
         static const std::vector<NewPreset> p {
-            { "Singing lead", "Lead", { { "attack", 180 }, { "sustain", 0.6f }, { "levelMatch", 1 }, { "smoothRepick", 1 }, { "touch", 0.3f }, { "follow", 0.4f },
+            { "Singing lead", "Lead", { { "attack", 180 }, { "sustain", 0.6f }, { "smoothRepick", 1 }, { "touch", 0.3f }, { "follow", 0.4f },
                                         { "feedback", 0.3f }, { "fbDistance", 0.3f }, { "fbRise", 1.6f }, { "vibDepth", 10 }, { "vibDelay", 0.35f }, { "vibTarget", 2 }, { "vibHuman", 1 } } },
-            { "Violin lead", "Lead", { { "attack", 350 }, { "swellShape", 1 }, { "levelMatch", 1 }, { "smoothRepick", 1 }, { "even", 0.4f }, { "sustain", 0.4f },
+            { "Violin lead", "Lead", { { "attack", 350 }, { "smoothRepick", 1 }, { "even", 0.4f }, { "sustain", 0.4f },
                                        { "filterOn", 1 }, { "freq", 6000 }, { "mod", 0.15f }, { "slope", 0 }, { "bowedBody", 1 },
                                        { "vibDepth", 14 }, { "vibDelay", 0.35f }, { "vibRate", 5 }, { "vibTarget", 2 }, { "vibHuman", 1 } } },
-            { "Slow bloom lead", "Lead", { { "attack", 600 }, { "sustain", 0.7f }, { "levelMatch", 1 }, { "follow", 0.5f }, { "feedback", 0.5f }, { "fbDistance", 0.28f },
+            { "Slow bloom lead", "Lead", { { "attack", 600 }, { "sustain", 0.7f }, { "follow", 0.5f }, { "feedback", 0.5f }, { "fbDistance", 0.28f },
                                            { "fbRise", 1.2f }, { "smearOn", 1 }, { "smearLevel", 0.3f }, { "smearSize", 0.45f }, { "smearSend", 1 } } },
-            { "Warm pad", "Pad", { { "attack", 1200 }, { "sustain", 0.8f }, { "levelMatch", 1 }, { "filterOn", 1 }, { "freq", 1800 }, { "mod", 0.4f }, { "res", 0.15f }, { "slope", 2 },
-                                   { "spread", 0.6f }, { "detune", 10 }, { "detuneMix", 0.5f }, { "detuneWobble", 0.3f }, { "smearOn", 1 }, { "smearSize", 0.7f }, { "smearLevel", 0.5f }, { "smearSend", 1 }, { "holdFade", 1.2f } } },
-            { "Glass pad", "Pad", { { "attack", 900 }, { "sustain", 0.6f }, { "levelMatch", 1 }, { "voiceMix", 0.4f }, { "voiceWave", 5 }, { "voiceOct", 2 }, { "voiceTone", 5000 },
-                                    { "voiceUnison", 0.3f }, { "spread", 0.5f }, { "smearOn", 1 }, { "smearSize", 0.65f }, { "smearLevel", 0.45f }, { "holdFade", 1.0f } } },
-            { "Frozen strings", "Pad", { { "attack", 1500 }, { "swellShape", 1 }, { "sustain", 0.7f }, { "levelMatch", 1 }, { "voiceMix", 0.35f }, { "voiceWave", 1 }, { "voiceTone", 4000 },
-                                         { "voiceCharacter", 0.5f }, { "detune", 7 }, { "detuneMix", 0.5f }, { "smearOn", 1 }, { "smearSize", 0.8f }, { "smearLevel", 0.5f }, { "smearDark", 1 }, { "holdFade", 1.5f } } },
+            { "Warm pad", "Pad", { { "attack", 1200 }, { "sustain", 0.8f }, { "filterOn", 1 }, { "freq", 1800 }, { "mod", 0.4f }, { "res", 0.15f }, { "slope", 2 },
+                                   { "spread", 0.6f }, { "detune", 10 }, { "detuneMix", 0.5f }, { "smearOn", 1 }, { "smearSize", 0.7f }, { "smearLevel", 0.5f }, { "smearSend", 1 } } },
+            { "Glass pad", "Pad", { { "attack", 900 }, { "sustain", 0.6f }, { "voiceMix", 0.4f }, { "voiceWave", 5 }, { "voiceOct", 2 }, { "voiceTone", 5000 },
+                                    { "voiceUnison", 0.3f }, { "spread", 0.5f }, { "smearOn", 1 }, { "smearSize", 0.65f }, { "smearLevel", 0.45f } } },
+            { "Frozen strings", "Pad", { { "attack", 1500 }, { "sustain", 0.7f }, { "voiceMix", 0.35f }, { "voiceWave", 1 }, { "voiceTone", 4000 },
+                                         { "voiceCharacter", 0.5f }, { "detune", 7 }, { "detuneMix", 0.5f }, { "smearOn", 1 }, { "smearSize", 0.8f }, { "smearLevel", 0.5f }, { "smearDark", 1 } } },
             // POG2: the owner's favourite setting (run G1), fitted by rendering the test file (tools/pog2_compare.py): POG2 shape
             // with its own gain, ATTACK 2 s; 18 dB/oct low-pass at 1 kHz (RES 0.23 = Q 1: the measured third-order Butterworth);
             // the two +-10 cent copies 15..19 dB under the note in mono (MIX 0.22). Held notes within ~2 dB, plucks ~4 dB.
@@ -68,7 +68,7 @@ namespace
                                      { "detune", 10.1f }, { "detuneMix", 0.39f } } },
             { "Amp in the room", "Feedback", { { "attack", 80 }, { "sustain", 0.5f }, { "feedback", 0.8f }, { "fbDistance", 0.3f }, { "fbRise", 1.2f }, { "fbTone", 1600 }, { "dry", 0.3f } } },
             { "Octave scream", "Feedback", { { "attack", 30 }, { "sustain", 0.4f }, { "feedback", 1.0f }, { "fbDistance", 0.27f }, { "fbRise", 0.6f }, { "fbTone", 2500 }, { "dry", 0.5f } } },
-            { "Slow howl", "Feedback", { { "attack", 400 }, { "sustain", 0.7f }, { "levelMatch", 1 }, { "feedback", 0.7f }, { "fbDistance", 0.55f }, { "fbRise", 2.5f }, { "fbTone", 1300 },
+            { "Slow howl", "Feedback", { { "attack", 400 }, { "sustain", 0.7f }, { "feedback", 0.7f }, { "fbDistance", 0.55f }, { "fbRise", 2.5f }, { "fbTone", 1300 },
                                          { "smearOn", 1 }, { "smearSize", 0.6f }, { "smearLevel", 0.35f } } } };
         return p;
     }
@@ -373,11 +373,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout PolySwellProcessor::createLa
            juce::StringArray { "Off", "I", "II", "I + II" }, 0));
 
     // HOLD (PolySwell II): freeze what is ringing into a pad
-    l.add (std::make_unique<juce::AudioParameterBool> (PID { "holdOn", 1 }, "Hold", false));
-    l.add (std::make_unique<APF> (PID { "holdFade", 1 }, "Hold Fade",
-           juce::NormalisableRange<float> (0.02f, 4.f, 0.01f, 0.5f), 0.6f, unit ("s", 2)));
-    l.add (std::make_unique<APF> (PID { "holdLevel", 1 }, "Hold Level", juce::NormalisableRange<float> (0.f, 1.f, 0.001f), 0.8f));
-    l.add (std::make_unique<juce::AudioParameterBool> (PID { "holdLatch", 1 }, "Hold Latch", true));
 
     // VIBRATO
     l.add (std::make_unique<APF> (PID { "vibDepth", 1 }, "Vibrato",
@@ -415,7 +410,6 @@ PolySwellProcessor::PolySwellProcessor()
 {
     for (auto& m : ccMap) m = -1;
     for (auto* prm : getParameters()) if (auto* r = dynamic_cast<juce::RangedAudioParameter*> (prm)) ccParams.add (r);
-    pHoldOn = apvts.getRawParameterValue ("holdOn"); pHoldFade = apvts.getRawParameterValue ("holdFade"); pHoldLevel = apvts.getRawParameterValue ("holdLevel");
     pVol     = apvts.getRawParameterValue ("vol");
     pAttack  = apvts.getRawParameterValue ("attack");
     pFreq    = apvts.getRawParameterValue ("freq");
@@ -543,8 +537,6 @@ void PolySwellProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     volSmooth.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (pVol->load()));
     bypassSmooth.reset (sampleRate, 0.015);
     bypassSmooth.setCurrentAndTargetValue (pBypass->load() > 0.5f ? 1.f : 0.f);
-    hold.prepare (sampleRate);
-    holdLevelSmooth.reset (sampleRate, 0.02); holdLevelSmooth.setCurrentAndTargetValue (pHoldLevel->load());
     drySmooth.reset (sampleRate, 0.02);
     drySmooth.setCurrentAndTargetValue (pDry->load());
     detuneSmooth.reset (sampleRate, 0.05);
@@ -717,7 +709,7 @@ void PolySwellProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     detuneSmooth.setTargetValue (effective (pDetune, pDetuneOn, 0.f) * mo);
     detuneMixSmooth.setTargetValue (detuneCopyLevel (apvts.getRawParameterValue ("detuneMix")->load()));   // DETUNE lives on the MOTION pedal
     const bool useLimiter = pLimiter->load() > 0.5f;
-    const float wobble = pWobble->load();
+    const float wobble = 0.f;   // the POG2's detuned copies are steady (measured); no WOBBLE on PolySwell II
     const float sr = (float) getSampleRate();
 
     const int numIn  = juce::jmin (getTotalNumInputChannels(), buffer.getNumChannels());
@@ -813,11 +805,7 @@ void PolySwellProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     }
 
 
-    hold.setHold (pHoldOn->load() > 0.5f);
-    holdLevelSmooth.setTargetValue (pHoldLevel->load() * 1.25f);
-    const float holdFade = pHoldFade->load();
-
-    // ---- pass 2: SMEAR, HOLD, dry, limiter, bypass
+    // ---- pass 2: SMEAR, dry, limiter, bypass
     for (int i = 0; i < n; ++i)
     {
         float wl = wetBuf.getSample (0, i), wr = wetBuf.getSample (1, i);
@@ -837,14 +825,6 @@ void PolySwellProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
             wl = (wl + rl * smLvl) * comp; wr = (wr + rr * smLvl) * comp;
         }
 
-        // HOLD: the frozen pad of what was ringing when it was pressed, added on top (new notes still swell over it)
-        {
-            float hl = 0.f, hr = 0.f;
-            hold.process (wl, wr, holdFade, hl, hr);
-            const float hg = holdLevelSmooth.getNextValue();
-            wl += hl * hg; wr += hr * hg;
-        }
-
         // DRY: unswelled signal (pick attack) mixed in, same latency as the wet path
         const float d = dry * drySmooth.getNextValue();
         wl += d; wr += d;
@@ -858,7 +838,6 @@ void PolySwellProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
         else if (numOut == 1) buffer.getWritePointer (0)[i] = 0.5f * (yl + yr);
         keyPeak = juce::jmax (keyPeak, std::abs (dry));
     }
-    holdLevelNow.store (hold.level(), std::memory_order_relaxed);
     smearKeyDb.store (juce::Decibels::gainToDecibels (keyPeak, -100.f), std::memory_order_relaxed);
 
     // MPE: when MPE is switched on, tell the synth (MPE configuration message on channel 1: 15 member channels; member
@@ -958,7 +937,7 @@ void PolySwellProcessor::handleCc (int cc, int value)
     const bool pressed = value >= 64 && last < 64;
     if (dynamic_cast<juce::AudioParameterBool*> (prm) != nullptr)
     {
-        const bool flips = id == "bypass" || (id == "holdOn" && apvts.getRawParameterValue ("holdLatch")->load() > 0.5f);
+        const bool flips = id == "bypass";
         if (flips) { if (pressed) prm->setValueNotifyingHost (prm->getValue() > 0.5f ? 0.f : 1.f); }
         else prm->setValueNotifyingHost (value >= 64 ? 1.f : 0.f);
     }
@@ -980,9 +959,9 @@ void PolySwellProcessor::setCurrentProgram (int i)
     i = juce::jlimit (0, getNumPrograms() - 1, i);
     if (i >= kNumPresets) { applyNewPreset (i - kNumPresets); return; }
     // the PolySwell II controls at rest (the classic presets were made before they existed)
-    for (auto id : { "levelMatch", "holdOn", "smearDark", "smearGate", "smearSend", "even" }) setParam (id, 0.f);
+    for (auto id : { "levelMatch", "smearDark", "smearGate", "smearSend", "even" }) setParam (id, 0.f);
     setParam ("fbAmp", 1.f); setParam ("fbDistance", 0.3f); setParam ("fbOneWins", 1.f); setParam ("fbRise", 1.2f); setParam ("fbTone", 1100.f);
-    setParam ("smearLevel", 0.5f); setParam ("smearSize", 0.5f); setParam ("holdFade", 0.6f); setParam ("holdLevel", 0.8f);
+    setParam ("smearLevel", 0.5f); setParam ("smearSize", 0.5f);
     setParam ("vibRate", 5.5f); setParam ("vibHuman", 0.f);
     currentProgram = i;
     const auto& p = kPresets[i];
@@ -1005,11 +984,11 @@ void PolySwellProcessor::setCurrentProgram (int i)
     setParam ("voiceString", 0.f); setParam ("voiceLife", 0.f); setParam ("voiceCharacter", 0.f); setParam ("voiceRes", 0.f); setParam ("voiceDecay", 0.18f);
     setParam ("smearThresh", -80.f);
     setParam ("vibDepth", v.vib);        setParam ("vibDelay", v.vibDelay);      setParam ("vibTarget", (float) v.vibTarget);
-    setParam ("pickFilter", kPickFilter[i]); setParam ("detuneWobble", kWobble[i]);
+    setParam ("pickFilter", kPickFilter[i]);
     // bowed extras: the VG-8 swell shape and smooth re-picks; everything else uses the classic swell
     const bool violinBody = juce::String (kPresets[i].name) == "Violin body";
     const bool bowed = juce::String (kPresets[i].name).startsWith ("Bowed") || violinBody;
-    setParam ("swellShape", bowed ? 1.f : 0.f); setParam ("smoothRepick", bowed ? 1.f : 0.f); setParam ("even", 0.f);
+    setParam ("swellShape", 2.f); setParam ("smoothRepick", bowed ? 1.f : 0.f); setParam ("even", 0.f);   // POG2 curve in every preset (owner)
     setParam ("bowedBody", bowed && ! violinBody ? 1.f : 0.f);
     setParam ("bodyIr", violinBody ? 1.f : 0.f); setParam ("bodyMix", violinBody ? 0.9f : 1.f);
     setParam ("driveOn", violinBody ? 1.f : 0.f); setParam ("driveType", violinBody ? 1.f : 0.f);
@@ -1021,7 +1000,8 @@ void PolySwellProcessor::setCurrentProgram (int i)
     setParam ("vibRate", bowed ? 4.5f : 5.5f);  setParam ("tremShape", 0.f); setParam ("tremSyncOn", 0.f);
     for (const auto& s : switchables()) setParam (s.onId, 1.f);   // a preset switches every knob back on
     for (auto id : { "bloomOn", "motionOn", "voiceOn" }) setParam (id, 1.f);
-    if (i == 0) { setParam ("swellShape", 2.f); setParam ("slope", 4.f); }   // Init: the POG2's swell and filter (the gen-2 defaults)
+    setParam ("swellShape", 2.f);   // the POG2's swell in every preset (other curves: gear > Swell curve)
+    if (i == 0) setParam ("slope", 4.f);   // Init: the POG2's swell and filter (the gen-2 defaults)
     setParam ("sync", 0.f);        // presets never change bypass or limiter
     currentPresetName = kPresets[i].name;
     userPresetLoaded = false;

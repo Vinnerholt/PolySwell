@@ -6,7 +6,6 @@
 #include "dsp/VoiceFx.h"
 #include "dsp/Smear.h"
 #include "dsp/Drive.h"
-#include "dsp/Hold.h"
 #include <juce_dsp/juce_dsp.h>
 #include <juce_audio_formats/juce_audio_formats.h>
 
@@ -108,7 +107,6 @@ public:
     void stopLearning() { ccLearn = -1; }
     float uiScale = 1.f;
     int uiSkin = 0;                         // 0 Sunburst, 1 Lagoon, 2 Midnight                    // editor size (0.75 .. 2)
-    std::atomic<float> holdLevelNow { 0.f };   // HOLD pad fade 0..1 (for the UI)
     std::array<bool, 5> uiFold { false, false, false, false, false };   // BLOOM, MOTION, VOICE, SMEAR, DRIVE
     std::array<int, 3>  uiOpenRow { -1, -1, -1 };
 
@@ -133,9 +131,7 @@ private:
     void handleCc (int cc, int value);
     void applyNewPreset (int index);
     void gen2Defaults();
-    swello::Hold hold;                      // HOLD: spectral freeze of what is ringing, added after SMEAR
-    std::atomic<float> *pHoldOn = nullptr, *pHoldFade = nullptr, *pHoldLevel = nullptr;
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> holdLevelSmooth, detuneMixSmooth;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> detuneMixSmooth;
     swello::Drive drive;                    // DRIVE: tape / tube saturation, after the body IR, before SMEAR
     juce::dsp::Convolution bodyConv { juce::dsp::Convolution::NonUniform { 256 } };   // BODY IR (zero latency)
     juce::AudioBuffer<float> wetBuf, convBuf, dryBuf;   // the block between the two passes (around the convolution)

@@ -5,7 +5,6 @@
 #include "dsp/VoiceFx.h"
 #include "dsp/Smear.h"
 #include "dsp/Drive.h"
-#include "dsp/Hold.h"
 #include <cstdio>
 #include <cstdlib>
 #include <vector>
@@ -1311,37 +1310,6 @@ int main()
         const double hE = spread(Vh, 0.75, 0.95), hL = spread(Vh, 1.9, 2.3), sE = spread(Vst, 0.75, 0.95);
         std::printf("  human vibrato: %.1f Hz wide at 0.75-0.95 s, %.1f Hz at 1.9-2.3 s (steady: %.1f Hz early)\n", hE, hL, sE);
         check(hE < 0.75 * hL && hE < 0.8 * sE, "HUMAN vibrato deepens gradually");
-    }
-
-    std::printf("Test 33: HOLD freezes the ringing sound into a pad\n");
-    {
-        auto rmsOf = [](const std::vector<float>& v, double t0, double t1)
-        { double e = 0; int n = 0; for (int i = (int) (t0 * kSr); i < (int) (t1 * kSr); ++i, ++n) e += (double) v[(size_t) i] * v[(size_t) i]; return std::sqrt(e / std::max(1, n)); };
-        Hold h; h.prepare(kSr);
-        const int total = (int) (5.0 * kSr);
-        std::vector<float> in((size_t) total, 0.f), out((size_t) total, 0.f);
-        for (int i = 0; i < (int) (1.0 * kSr); ++i)    // an A major chord that stops dead at 1 s
-            in[(size_t) i] = 0.1f * (float) (std::sin(2 * kPi * 220.0 * i / kSr) + std::sin(2 * kPi * 277.2 * i / kSr) + std::sin(2 * kPi * 329.6 * i / kSr));
-        for (int i = 0; i < total; ++i)
-        {
-            if (i == (int) (0.6 * kSr)) h.setHold(true);
-            if (i == (int) (3.0 * kSr)) h.setHold(false);
-            float l, r; h.process(in[(size_t) i], in[(size_t) i], 0.2f, l, r);
-            out[(size_t) i] = l;
-        }
-        const double src = rmsOf(in, 0.3, 0.6), before = rmsOf(out, 0.1, 0.55), held = rmsOf(out, 1.5, 2.9), after = rmsOf(out, 3.6, 4.9);
-        const double a220 = amp(out, (int) (1.5 * kSr), (int) (1.0 * kSr), 220.0), aOff = amp(out, (int) (1.5 * kSr), (int) (1.0 * kSr), 400.0);
-        std::printf("  source %.4f, before the press %.5f, held (input silent) %.4f = %+.1f dB, after release %.5f; 220 Hz / 400 Hz (between notes) %.0fx\n",
-                    src, before, held, 20 * std::log10(held / src), after, a220 / std::max(aOff, 1e-9));
-        check(before < 1e-6, "HOLD: silent until pressed");
-        check(std::abs(20 * std::log10(held / src)) < 3.0, "HOLD: the pad keeps the level of what was ringing");
-        check(a220 > 8.0 * aOff, "HOLD: the pad keeps the notes (no smear between them)");
-        check(after < 1e-5, "HOLD: fades out on release");
-        // steady: the pad must not warble (a chord in 100 ms slices; the first version, random phases, was garbled)
-        double lo = 1e9, hi = 0;
-        for (double t = 1.5; t < 2.8; t += 0.1) { const double r = rmsOf(out, t, t + 0.1); lo = std::min(lo, r); hi = std::max(hi, r); }
-        std::printf("  held pad, loudest / quietest 100 ms: %.2f\n", hi / lo);
-        check(hi / lo < 1.15, "HOLD: the pad is steady (no warble)");
     }
 
     std::printf("Test 34: level-matched swell\n");

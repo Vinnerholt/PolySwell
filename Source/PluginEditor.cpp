@@ -89,7 +89,7 @@ const ModDef kMods[6] = {
     { "FEEDBACK", "Amp in the room",         "feedbackOn", col::feedback },
     { "MOTION",   "Movement per note",       "motionOn",   col::motion },
     { "LAYER",    "Synth under each note",   "voiceOn",    col::layer },
-    { "HOLD",     "Freeze into a pad",       nullptr,      col::hold },
+    { "",         "",                        nullptr,      col::hold },   // unused slot (HOLD was removed)
     { "SPACE",    "Follows the swell",       "smearOn",    col::space } };
 
 // a small line icon per module, in its header
@@ -165,15 +165,13 @@ const char* tipFor (const String& id)
         { "voiceTone", "TONE: the voice's own low-pass filter." },
         { "voiceGlide", "GLIDE: single notes slide from the previous one." },
         { "voiceCharacter", "CHARACTER: makes the voice more alive (string colour, wander, scoop, breath)." },
-        { "holdFade", "FADE: how quickly the frozen pad fades in and out." },
-        { "holdLevel", "LEVEL: how loud the frozen pad is." },
         { "smearSize", "SIZE: the reverb's length." },
         { "smearLevel", "LEVEL: how much reverb is heard (level-matched)." },
         { "smearDrive", "DRIVE: soft clipping on the reverb only." },
         { "follow", "PACE: fast playing shortens the swell, slow playing keeps the full ATTACK." },
         { "even", "EVEN: levels soft and hard picks. Drag up or down." },
         { "vibRate", "Vibrato rate. Drag up or down." }, { "vibDelay", "Time before the vibrato starts. Drag up or down." },
-        { "tremRate", "Tremolo rate. Drag up or down." }, { "detuneWobble", "Slow wobble of the detuned copy. Drag up or down." },
+        { "tremRate", "Tremolo rate. Drag up or down." },
         { "voiceUnison", "Unison: extra detuned copies of the voice. Drag up or down." },
         { "bodyMix", "How much of the body IR is heard. Drag up or down." },
         { "smearHold", "Gate hold time after you stop playing. Drag up or down." },
@@ -291,18 +289,25 @@ struct Look : juce::LookAndFeel_V4
         if (kind < 2 && skin != nullptr)   // the pedal's knobs: ivory, the logo's three rings around it filling with the value
         {
             const float bw = (float) w, c = b.getCentreX(), cy = b.getCentreY();
-            const float rw = bw > 100.f ? 3.4f : bw > 60.f ? 2.6f : 2.f, gap = rw + 1.8f, pad = 6.f + 3.f * gap + 4.f;
+            const float rw0 = bw > 100.f ? 3.4f : bw > 60.f ? 2.6f : 2.f, pad = 6.f + 3.f * (rw0 + 1.8f) + 4.f;   // face size as before
             const float R = bw * 0.5f - pad, a = a0 + pos * (a1 - a0);
-            const juce::PathStrokeType st (rw, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
-            for (int k = 0; k < 3; ++k)
+            const float rw = bw > 100.f ? 6.f : bw > 60.f ? 4.f : 3.2f, rr = R + 3.f + rw * 0.5f;
+            // one ring whose colour fades along the sweep, from the skin's lightest colour to its deepest
+            auto ringCol = [&] (float t) { return t < 0.5f ? skin->rings[0].interpolatedWith (skin->rings[1], t * 2.f)
+                                                           : skin->rings[1].interpolatedWith (skin->rings[2], t * 2.f - 1.f); };
+            const int segs = 60;
+            const juce::PathStrokeType seg (rw, juce::PathStrokeType::curved, juce::PathStrokeType::butt);
+            for (int k = 0; k < segs; ++k)
             {
-                const float r = R + 5.f + (float) (2 - k) * gap;
-                juce::Path track; track.addCentredArc (c, cy, r, r, 0.f, a0, a1, true);
-                g.setColour (skin->rings[k].withAlpha (0.22f)); g.strokePath (track, st);
-                if (a > a0 + 0.01f)
+                const float t0 = (float) k / segs, t1 = (float) (k + 1) / segs, tm = (t0 + t1) * 0.5f;
+                const float s0 = a0 + t0 * (a1 - a0), s1 = a0 + t1 * (a1 - a0);
+                juce::Path arc; arc.addCentredArc (c, cy, rr, rr, 0.f, s0, juce::jmin (s1 + 0.004f, a1), true);
+                const bool lit = s1 <= a + 0.0001f;
+                g.setColour (ringCol (tm).withAlpha (lit ? 1.f : 0.2f)); g.strokePath (arc, seg);
+                if (! lit && s0 < a)   // the segment under the pointer: lit up to it
                 {
-                    juce::Path lit; lit.addCentredArc (c, cy, r, r, 0.f, a0, a, true);
-                    g.setColour (skin->rings[k]); g.strokePath (lit, st);
+                    juce::Path part; part.addCentredArc (c, cy, rr, rr, 0.f, s0, a, true);
+                    g.setColour (ringCol (tm)); g.strokePath (part, seg);
                 }
             }
             juce::Path face; face.addEllipse (c - R, cy - R, 2 * R, 2 * R);
@@ -777,10 +782,9 @@ struct SignalWindow : juce::Component, juce::Timer
             { "vibDepth", 3 }, { "vibRate", 3 }, { "vibDelay", 3 }, { "vibHuman", 3 }, { "vibTarget", 3 },
             { "tremolo", 4 }, { "tremRate", 4 }, { "tremShape", 4 },
             { "spread", 5 }, { "spreadMode", 5 },
-            { "detune", 6 }, { "detuneWobble", 6 }, { "detuneMix", 6 },
+            { "detune", 6 }, { "detuneMix", 6 },
             { "voiceMix", 7 }, { "voiceTone", 7 }, { "voiceWave", 7 }, { "voiceOct", 7 }, { "voiceUnison", 7 }, { "voiceMono", 7 },
             { "voiceGlide", 7 }, { "voiceCharacter", 7 },
-            { "holdFade", 8 }, { "holdLevel", 8 }, { "holdLatch", 8 },
             { "smearSize", 9 }, { "smearLevel", 9 }, { "smearDrive", 9 }, { "smearHold", 9 }, { "smearCut", 9 }, { "smearThresh", 9 },
             { "smearSend", 9 }, { "smearDark", 9 }, { "smearGate", 9 },
             { "fbDistance", 10 }, { "fbOneWins", 10 }, { "fbAmp", 10 }, { "fbHarmonic", 10 }, { "fbMode", 10 } };
@@ -871,15 +875,6 @@ struct SignalWindow : juce::Component, juce::Timer
         if (c.pick) { inPeakNote = inLin; pickCols = 0; }
         else if (++pickCols < 4) inPeakNote = juce::jmax (inPeakNote, inLin);
 
-        // HOLD: remember which notes were ringing when the pad was frozen
-        const float hl = proc.holdLevelNow.load (std::memory_order_relaxed);
-        if (hl > 0.f && lastHold <= 0.f)
-        {
-            heldN = 0; heldAge = 0;
-            const Col& now = col (0);
-            for (int j = 0; j < now.n; ++j) heldMidi[heldN++] = now.midi[j];
-        }
-        heldAge = juce::jmin (heldAge + 1, kCols);
 
         // input meter: per-block peak of the guitar, falling 1.5 dB a frame, with a 1 s peak hold
         const float key = proc.smearKeyDb.load (std::memory_order_relaxed);
@@ -896,9 +891,9 @@ struct SignalWindow : juce::Component, juce::Timer
         const bool byp = on ("bypass");
         // nothing moving: stop repainting once the last note has scrolled off
         quiet = (n > 0 || c.outDb > -90.f || meterDb > -60.f) ? 0 : quiet + 1;
-        if (quiet < kCols + 2 || roTicks > 0 || hadReadout || hl != lastHold || byp != lastByp || viewA > 0.f || before > 0.f || paramsChanged())
+        if (quiet < kCols + 2 || roTicks > 0 || hadReadout || byp != lastByp || viewA > 0.f || before > 0.f || paramsChanged())
             repaint();
-        hadReadout = roTicks > 0; lastHold = hl; lastByp = byp;
+        hadReadout = roTicks > 0; lastByp = byp;
     }
 
     // the live view follows these even when nothing is playing
@@ -1305,7 +1300,7 @@ struct SignalWindow : juce::Component, juce::Timer
         const Plot pl = timeGrid (g, b);
         const float mid = pl.base - pl.h * 0.5f, half = pl.h * 0.5f;
         g.setColour (cGlow.withAlpha (0x33 / 255.f)); g.fillRect (pl.x0, mid, pl.w, 1.f);
-        const float d = P ("detune"), wob = P ("detuneWobble");
+        const float d = P ("detune"), wob = 0.f;
         const float a = on ("detuneOn") ? PolySwellProcessor::detuneCopyLevel (P ("detuneMix")) * juce::jmin (1.f, d / 5.f) : 0.f;
         // the note itself, fading as the copies take over
         juce::Path nt; nt.startNewSubPath (pl.x0, mid); nt.lineTo (pl.x0 + pl.w, mid);
@@ -1417,27 +1412,7 @@ struct SignalWindow : juce::Component, juce::Timer
         return mix < 0.005f ? String ("off: only the guitar") : "guitar and synth voice: " + String (juce::roundToInt (mix * 100.f)) + " % voice";
     }
 
-    // ---------------------------------------------------------------- HOLD and SPACE
-    String paintHold (Graphics& g, Rect b)
-    {
-        const Plot pl = timeGrid (g, b);
-        const Colour violet (0xffc4a6ec);
-        const float fade = juce::jmax (0.02f, P ("holdFade")), lvl = P ("holdLevel"), tp = 0.6f, tr = 2.7f;
-        const bool latch = on ("holdLatch");
-        const float target = juce::jmin (1.f, lvl * 1.25f * natural (tp));
-        dashed (g, curve (pl, 0.f, [] (float t) { return natural (t); }), Colour (0xffd8c3a2).withAlpha (0.55f));
-        glowLine (g, curve (pl, tp, [&] (float t)
-        {
-            const float up = juce::jlimit (0.f, 1.f, (t - tp) / fade), down = t > tr ? 1.f - juce::jlimit (0.f, 1.f, (t - tr) / fade) : 1.f;
-            return target * juce::jmin (up, down);
-        }), violet, &pl);
-        markAt (g, pl, tp, violet, "PRESS");
-        markAt (g, pl, tr, violet, latch ? "PRESS AGAIN" : "LET GO");
-        if (focusId == "holdLatch") return latch ? "press to freeze, press again to let go" : "the pad holds only while the footswitch is down";
-        if (focusId == "holdLevel") return "the frozen pad at " + String (juce::roundToInt (lvl * 100.f)) + " %";
-        return "the pad fades in and out over " + tidyValue (String (fade), "s");
-    }
-
+    // ---------------------------------------------------------------- SPACE
     String paintSpace (Graphics& g, Rect b)
     {
         const Plot pl = timeGrid (g, b);
@@ -1532,16 +1507,6 @@ struct SignalWindow : juce::Component, juce::Timer
             g.setColour (cGlow.withAlpha (0x14 / 255.f)); g.fillRect (lane.getX(), y, lane.getWidth(), 1.f);
             g.setColour (cText.withAlpha (0x66 / 255.f)); g.drawText (noteName ((float) m), Rect (lane.getRight() - 24.f, y - 10.f, 22.f, 10.f), juce::Justification::centredRight);
         }
-
-        // HOLD: the frozen notes as steady violet bands from the press on
-        const float hl = lastHold;
-        if (hl > 0.f)
-            for (int j = 0; j < heldN; ++j)
-            {
-                const float y = yOfHz (hzOf (heldMidi[j]), lane), xa = juce::jmax (lane.getX(), X (heldAge));
-                g.setColour (violet.withAlpha (0.16f * hl)); g.fillRect (xa, y - 4.f, lane.getRight() - xa, 8.f);
-                g.setColour (violet.withAlpha (0.8f * hl)); g.fillRect (xa, y - 0.75f, lane.getRight() - xa, 1.5f);
-            }
 
         // FILTER: a soft veil over everything above the cutoff (no line); the notes under it dim (below)
         const bool filterOn = on ("filterOn");
@@ -1681,12 +1646,12 @@ struct SignalWindow : juce::Component, juce::Timer
         // what is shaping the sound: lit when in use
         struct Item { const char* s; Colour c; bool lit; };
         const Item items[] = { { "SWELL", amberC, ! lastByp }, { "FILTER", teal, filterOn }, { "FEEDBACK", rust, fbOn },
-                               { "LAYER", blue, layerOn }, { "HOLD", violet, hl > 0.f }, { "SPACE", sage, spaceOn } };
+                               { "LAYER", blue, layerOn }, { "SPACE", sage, spaceOn } };
         const auto lf = uiFont (9.f, true, 0.06f);
         g.setFont (lf);
         float tw = 0.f;
         for (auto& it : items) tw += juce::GlyphArrangement::getStringWidth (lf, it.s) + 8.f;
-        const float gapL = juce::jmax (4.f, (b.getWidth() - 20.f - tw) / 5.f);   // spread across the glass
+        const float gapL = juce::jmax (4.f, (b.getWidth() - 20.f - tw) / 4.f);   // spread across the glass
         float lx = 10.f; const float ly = b.getHeight() - 11.f;
         for (auto& it : items)
         {
@@ -1715,7 +1680,6 @@ struct SignalWindow : juce::Component, juce::Timer
         g.reduceClipRegion (clip);
         g.setGradientFill (juce::ColourGradient (cGlass1, b.getCentreX(), b.getHeight() * 0.55f, cGlass2, 0.f, 0.f, true));
         g.fillAll();
-        if (lastHold > 0.f) { g.setColour (Colour (0xffc4a6ec).withAlpha (0.05f * lastHold)); g.fillAll(); }
 
         if (viewA < 0.99f)
         {
@@ -1738,7 +1702,6 @@ struct SignalWindow : juce::Component, juce::Timer
                 case 5:  says = paintSpread (g, b); tc = Colour (0xfff2c96a); break;
                 case 6:  says = paintDetune (g, b); tc = Colour (0xfff2c96a); break;
                 case 7:  says = paintLayer (g, b); tc = Colour (0xffa9c8ee); break;
-                case 8:  says = paintHold (g, b); tc = Colour (0xffd2bcf2); break;
                 case 9:  says = paintSpace (g, b); tc = Colour (0xffc5dda4); break;
                 default: says = paintLadder (g, b); tc = Colour (0xffffa58a); break;
             }
@@ -1778,10 +1741,9 @@ struct SignalWindow : juce::Component, juce::Timer
 
     PolySwellProcessor& proc;
     std::array<Col, kCols> cols {};
-    int head = 0, idle = 0, quiet = 0, roTicks = 0, linger = 0, heldN = 0, heldAge = 0, peakHoldT = 0, pickCols = 99;
-    float heldMidi[kMaxN] {};
+    int head = 0, idle = 0, quiet = 0, roTicks = 0, linger = 0, peakHoldT = 0, pickCols = 99;
     uint32_t lastFrame = 0, lastSeq = 0;
-    float lastHold = 0.f, viewA = 0.f, noteAge = -1.f, noteAttack = 0.f, paramSum = 0.f, lvlRef = 1.0e-6f,
+    float viewA = 0.f, noteAge = -1.f, noteAttack = 0.f, paramSum = 0.f, lvlRef = 1.0e-6f,
           meterDb = -100.f, peakDb = -100.f, inPeakNote = 0.f;
     bool lastByp = false, hadReadout = false, focusHeld = false;
     String roName, roValue, focusId;
@@ -1861,7 +1823,6 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         else m.addItem (1, cc >= 0 ? "MIDI learn again (now CC " + String (cc) + ")" : String ("MIDI learn: then move a pedal or knob on your controller"));
         if (cc >= 0) m.addItem (3, "Forget CC " + String (cc));
         if (dynamic_cast<juce::AudioParameterBool*> (prm) == nullptr) m.addItem (4, "Reset to default");
-        if (id == "holdOn") { m.addSeparator(); m.addItem (10, "Latch: press to freeze, press again to let go", true, getParam ("holdLatch") > 0.5f); }
         m.setLookAndFeel (&look);
         m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&target), [this, id] (int r)
         {
@@ -1870,7 +1831,6 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
             else if (r == 2) { proc.stopLearning(); learnId = {}; }
             else if (r == 3) proc.forgetCc (id);
             else if (r == 4 && p != nullptr) { p->beginChangeGesture(); p->setValueNotifyingHost (p->getDefaultValue()); p->endChangeGesture(); }
-            else if (r == 10) setParam ("holdLatch", getParam ("holdLatch") > 0.5f ? 0.f : 1.f);
         });
     }
     void showKnobView (const String& paramId, bool on)   // for tools/ui_snapshot
@@ -2002,8 +1962,8 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         const char* bid[3] = { "attack", "sustain", "freq" }; const char* bn[3] = { "ATTACK", "SUSTAIN", "TONE" };
         for (int i = 0; i < 3; ++i)
         {
-            knob (bid[i], bn[i], 0, px + bx[i], py + 266, col::amber, g, bsz[i]);
-            label (bn[i], { px + bx[i] - 60, py + (i == 1 ? 311.f : 321.f), 120, 16 }, i == 1 ? 12.f : 13.f, col::ink, juce::Justification::centred, true, 0.18f);
+            knob (bid[i], bn[i], 0, px + bx[i], py + 252, col::amber, g, bsz[i]);
+            label (bn[i], { px + bx[i] - 60, py + (i == 1 ? 293.f : 303.f), 120, 16 }, i == 1 ? 12.f : 13.f, col::ink, juce::Justification::centred, true, 0.18f);
         }
         // row 2 in two printed groups: how the swell follows your playing | what comes out
         struct Grp { const char* title; float x, w; std::vector<std::pair<const char*, const char*>> ks; std::vector<float> xs; };
@@ -2011,62 +1971,25 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
                                 { "OUTPUT", 226.f, 136.f, { { "dry", "DRY" }, { "vol", "LEVEL" } }, { 266.f, 324.f } } };
         for (auto& gr : groups)
         {
-            pedalGroups.push_back ({ gr.title, Rect (px + gr.x, py + 356.f, gr.w, 80.f) });
+            pedalGroups.push_back ({ gr.title, Rect (px + gr.x, py + 336.f, gr.w, 76.f) });
             for (size_t i = 0; i < gr.ks.size(); ++i)
             {
                 const float cx = px + gr.xs[i];
-                knob (gr.ks[i].first, gr.ks[i].second, 1, cx, py + 388.f, col::amber, g, 78);
-                label (gr.ks[i].second, { cx - 40.f, py + 422.f, 80.f, 13.f }, 10.f, col::ink, juce::Justification::centred, true, 0.16f);
+                knob (gr.ks[i].first, gr.ks[i].second, 1, cx, py + 366.f, col::amber, g, 78);
+                label (gr.ks[i].second, { cx - 40.f, py + 391.f, 80.f, 13.f }, 10.f, col::ink, juce::Justification::centred, true, 0.16f);
             }
         }
 
-        // the swell's own options, in one row under the window
-        auto* shape = chip (Chip::menu, "swellShape", "", col::amber, "Swell shape: Classic (the pedal's curve) or Bowed (a slower, S-shaped start).", g);
-        auto* sync = chip (Chip::custom, "", "SYNC", col::amber, "Tempo sync: ATTACK becomes a note length of the host tempo.", g);
-        sync->textFn = [this] { return getParam ("sync") > 0.5f ? "SYNC " + proc.apvts.getParameter ("syncDiv")->getCurrentValueAsText() : String ("SYNC OFF"); };
-        sync->litFn = [this] { return getParam ("sync") > 0.5f; };
-        sync->setSize (86, 22);
-        sync->onPress = [this, sync]
-        {
-            juce::PopupMenu m;
-            m.addItem (1, "Off", true, getParam ("sync") < 0.5f);
-            const auto names = proc.apvts.getParameter ("syncDiv")->getAllValueStrings();
-            for (int i = 0; i < names.size(); ++i) m.addItem (10 + i, names[i], true, getParam ("sync") > 0.5f && juce::roundToInt (getParam ("syncDiv")) == i);
-            m.setLookAndFeel (&look);
-            m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (sync), [this, sync] (int r)
-            {
-                if (r == 1) setParam ("sync", 0.f);
-                else if (r >= 10) { setParam ("syncDiv", (float) (r - 10)); setParam ("sync", 1.f); }
-                sync->repaint();
-            });
-        };
-        auto* match = chip (Chip::toggle, "levelMatch", "MATCH", col::amber,
-                            "MATCH: a long swell ends as loud as the pick was. Off: slow swells come out quieter, as on the pedal.", g);
-        const float total = (float) (shape->getWidth() + match->getWidth() + sync->getWidth()) + 16.f;
-        flow ({ shape, match, sync }, px + (kPedalW - total) * 0.5f, py + 192, 8.f);
-        for (auto* c : { shape, match, sync }) { c->pedalSkin = &currentSkin; c->setSize (c->getWidth() + 6, 22); }
-
-        addAndMakeVisible (onLed); addAndMakeVisible (holdLed);
-        onLed.setBounds (juce::roundToInt (px + 97), juce::roundToInt (py + 556), 28, 22);
-        holdLed.setBounds (juce::roundToInt (px + 257), juce::roundToInt (py + 556), 28, 22);
-        onLed.pedalSkin = &currentSkin; holdLed.pedalSkin = &currentSkin;
-        addAndMakeVisible (onSw); addAndMakeVisible (holdSw);
-        onSw.setBounds (juce::roundToInt (px + 33), juce::roundToInt (py + 550), 70, 70);
-        holdSw.setBounds (juce::roundToInt (px + 289), juce::roundToInt (py + 550), 70, 70);
+        // the ON footswitch, centred, its LED to the left
+        addAndMakeVisible (onLed);
+        onLed.setBounds (juce::roundToInt (px + 128 - 18), juce::roundToInt (py + 566 - 18), 36, 36);   // room for the glow
+        onLed.pedalSkin = &currentSkin;
+        addAndMakeVisible (onSw);
+        onSw.setBounds (juce::roundToInt (px + 196 - 36), juce::roundToInt (py + 578 - 36), 72, 72);
         onSw.setTooltip ("ON: switches the pedal in or out (bypass). Right-click: MIDI learn (a footswitch on your controller).");
-        holdSw.setTooltip ("HOLD: freezes what is ringing into a pad you can play over. Right-click: MIDI learn.");
         onSw.onMenu = [this] { midiMenu ("bypass", onSw); };
-        // HOLD's own two settings, small, right beside its footswitch (LATCH: right-click the footswitch)
-        knob ("holdFade", "FADE", 1, px + 166.f, py + 580.f, col::amber, g, 64);
-        knob ("holdLevel", "LEVEL", 1, px + 214.f, py + 580.f, col::amber, g, 64);
-        label ("FADE", { px + 141.f, py + 607.f, 50.f, 12.f }, 9.f, col::ink, juce::Justification::centred, true, 0.14f);
-        label ("LEVEL", { px + 189.f, py + 607.f, 50.f, 12.f }, 9.f, col::ink, juce::Justification::centred, true, 0.14f);
-        holdSw.onMenu = [this] { midiMenu ("holdOn", holdSw); };
         onSw.onDown = [this] { setParam ("bypass", getParam ("bypass") > 0.5f ? 0.f : 1.f); };
-        holdSw.onDown = [this] { setParam ("holdOn", getParam ("holdLatch") > 0.5f ? (getParam ("holdOn") > 0.5f ? 0.f : 1.f) : 1.f); };
-        holdSw.onUp = [this] { if (getParam ("holdLatch") < 0.5f) setParam ("holdOn", 0.f); };
-        label ("ON", { px + 104, py + 576, 40, 14 }, 12.f, col::ink, juce::Justification::centredLeft, true, 0.18f);
-        label ("HOLD", { px + 247, py + 576, 46, 14 }, 12.f, col::ink, juce::Justification::centredLeft, true, 0.18f);
+        label ("ON", { px + 128 - 20, py + 584, 40, 14 }, 12.f, col::ink, juce::Justification::centred, true, 0.18f);
     }
 
     // ---- panel
@@ -2090,10 +2013,9 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
 
         for (int i = 0; i < 6; ++i)
         {
-            if (i == 4) continue;   // HOLD is on the pedal
+            if (i == 4) continue;   // unused slot (was HOLD)
             const auto r = moduleRect (i);
-            Led* l = leds.add (new Led (proc, kMods[i].onId != nullptr ? kMods[i].onId : "holdOn", false,
-                                        String (kMods[i].title) + (i == 4 ? ": lit while a pad is held." : ": click to switch this module on or off.")));
+            Led* l = leds.add (new Led (proc, kMods[i].onId, false, String (kMods[i].title) + ": click to switch this module on or off."));
             l->setBounds (juce::roundToInt (r.getX() + 8), juce::roundToInt (r.getY() + 8), 26, 24);
             addAndMakeVisible (l); g.add (l);
             label (kMods[i].title, { r.getX() + 62, r.getY() + 10, 120, 20 }, 16.f, kMods[i].ac.interpolatedWith (col::cream, 0.4f), juce::Justification::centredLeft, true, 0.2f);
@@ -2163,7 +2085,7 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
                 }
                 else if (c == 1) stack = { valueChip ("tremRate", "RATE", 0, ac, g), chip (Chip::menu, "tremShape", "", ac, "Tremolo shape.", g) };
                 else if (c == 2) stack = { chip (Chip::menu, "spreadMode", "", ac, "How SPREAD places the notes.", g) };
-                else stack = { valueChip ("detuneWobble", "WOBBLE", 0, ac, g) };
+                else stack = {};
                 float y = r.getY() + 123.f;
                 for (auto* comp : stack) { comp->setTopLeftPosition (juce::roundToInt (cx - (float) comp->getWidth() * 0.5f), juce::roundToInt (y)); y += 25.f; }
             }
@@ -2214,7 +2136,6 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
     {
         const int n = proc.getNumPrograms();
         proc.setCurrentProgram ((proc.getCurrentProgram() + d + n) % n);
-        setParam ("holdOn", 0.f);
     }
 
     void presetMenu()
@@ -2237,8 +2158,8 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&lcd).withMaximumNumColumns (2), [this, user] (int r)
         {
             if (r == 1) savePreset();
-            else if (r >= 1000) { proc.loadUserPreset (user[r - 1000]); setParam ("holdOn", 0.f); }
-            else if (r >= 100) { proc.setCurrentProgram (r - 100); setParam ("holdOn", 0.f); }
+            else if (r >= 1000) { proc.loadUserPreset (user[r - 1000]); }
+            else if (r >= 100) { proc.setCurrentProgram (r - 100); }
         });
     }
 
@@ -2339,6 +2260,19 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         for (int i = 0; i < 5; ++i) size.addItem (40 + i, String (juce::roundToInt (sizes[i] * 100)) + " %", true, std::abs (proc.uiScale - sizes[i]) < 0.01f);
         m.addSubMenu ("Size", size);
         m.addItem (4, panelOpen ? "Hide the effects panel" : "Show the effects panel");
+        juce::PopupMenu curveM;
+        const char* curves[3] = { "Classic", "Bowed (slow, S-shaped start)", "POG2 (default)" };
+        for (int i : { 2, 0, 1 }) curveM.addItem (390 + i, curves[i], true, juce::roundToInt (getParam ("swellShape")) == i);
+        curveM.addSeparator();
+        curveM.addItem (395, "MATCH: swells end as loud as the pick (instead of the POG2's gain)", true, getParam ("levelMatch") > 0.5f);
+        m.addSubMenu ("Swell curve", curveM);
+        juce::PopupMenu syncM;
+        syncM.addItem (400, "Off", true, getParam ("sync") < 0.5f);
+        {
+            const auto names = proc.apvts.getParameter ("syncDiv")->getAllValueStrings();
+            for (int i = 0; i < names.size(); ++i) syncM.addItem (410 + i, names[i], true, getParam ("sync") > 0.5f && juce::roundToInt (getParam ("syncDiv")) == i);
+        }
+        m.addSubMenu ("ATTACK tempo sync", syncM);
         juce::PopupMenu skinM;
         for (int i = 0; i < 3; ++i) skinM.addItem (380 + i, skinAt (i).name, true, proc.uiSkin == i);
         m.addSubMenu ("Skin", skinM);
@@ -2347,6 +2281,10 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         {
             auto flip = [this] (const char* id) { setParam (id, getParam (id) > 0.5f ? 0.f : 1.f); };
             if (r >= 380 && r < 383) applySkin (r - 380);
+            else if (r >= 390 && r < 393) setParam ("swellShape", (float) (r - 390));
+            else if (r == 395) setParam ("levelMatch", getParam ("levelMatch") > 0.5f ? 0.f : 1.f);
+            else if (r == 400) setParam ("sync", 0.f);
+            else if (r >= 410 && r < 440) { setParam ("syncDiv", (float) (r - 410)); setParam ("sync", 1.f); }
             else if (r >= 360 && r < 366) setParam ("detune", cents[r - 360]);
             else if (r >= 340 && r < 345) setParam ("sustainMax", (float) maxes[r - 340]);
             else if (r >= 320 && r < 330) setParam ("fbHarmonic", (float) (r - 320));
@@ -2391,7 +2329,6 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         if (getParam ("feedback") > 0.f && getParam ("feedbackOn") > 0.5f) act |= 2;
         if (getParam ("motionOn") > 0.5f && (getParam ("vibDepth") > 0.f || getParam ("tremolo") > 0.f || getParam ("spread") > 0.f || getParam ("detuneMix") > 0.f)) act |= 4;
         if (getParam ("voiceOn") > 0.5f && getParam ("voiceMix") > 0.f) act |= 8;
-        if (getParam ("holdOn") > 0.5f) act |= 16;
         if (getParam ("smearOn") > 0.5f) act |= 32;
         if (gateHold != nullptr) { const float a = getParam ("smearGate") > 0.5f ? 1.f : 0.4f; gateHold->setAlpha (a); gateCut->setAlpha (a); }
         if (act != drawer.mask || drawer.open != panelOpen) { drawer.mask = act; drawer.open = panelOpen; drawer.repaint(); }
@@ -2423,8 +2360,12 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         const Rect pr (kPedalX, kPedalY, kPedalW, kPedalH);
         const Skin& sk = currentSkin != nullptr ? *currentSkin : skinAt (0);
         juce::Path pedal; pedal.addRoundedRectangle (pr, 24.f);
-        juce::DropShadow (juce::Colours::black.withAlpha (0.8f), 30, { 0, 16 }).drawForPath (g, pedal);
-        juce::DropShadow (juce::Colours::black.withAlpha (0.6f), 6, { 0, 3 }).drawForPath (g, pedal);
+        {
+            Graphics::ScopedSaveState ss (g);   // shadow outside the plate only (JUCE 8's Direct2D drew it over the plate: grey)
+            g.excludeClipRegion (pr.toNearestInt());
+            juce::DropShadow (juce::Colours::black.withAlpha (0.8f), 30, { 0, 16 }).drawForPath (g, pedal);
+            juce::DropShadow (juce::Colours::black.withAlpha (0.6f), 6, { 0, 3 }).drawForPath (g, pedal);
+        }
         {
             Graphics::ScopedSaveState ss (g);
             g.reduceClipRegion (pedal);
@@ -2439,7 +2380,12 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
             g.setColour (sk.ink); g.fillRoundedRectangle (tab, 7.f);
             g.setFont (f); g.setColour (sk.body1); g.drawText (gr.first, tab.translated (1.5f, 0.f), juce::Justification::centred);
         }
-        g.drawImage (sk.logoImg(), Rect (pr.getX() + 71, pr.getY() + 442, 250, 109), juce::RectanglePlacement::centred);
+        {
+            const auto logo = sk.logoImg();   // visible part: x 8..1006, y 8..359 of 1012 x 440
+            const float lw = 236.f, lh = lw * 351.f / 998.f, ly = pr.getY() + (412.f + 548.f) * 0.5f - lh * 0.5f;
+            g.drawImage (logo, juce::roundToInt (pr.getCentreX() - lw * 0.5f), juce::roundToInt (ly), juce::roundToInt (lw), juce::roundToInt (lh),
+                         8, 8, 998, 351);
+        }
 
         // --- panel plate and its six modules
         if (panelOpen)
@@ -2555,10 +2501,10 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         {
             const Skin& sk = currentSkin != nullptr ? *currentSkin : skinAt (0);
             g.setColour (sk.ink.withAlpha (0.55f));
-            g.fillEllipse (kPedalX + 308 - 38, kPedalY + 266 - 38, 76, 76);
+            g.fillEllipse (kPedalX + 308 - 38, kPedalY + 252 - 38, 76, 76);
             g.setColour (sk.body1);
             g.setFont (uiFont (10.f, true, 0.12f));
-            g.drawText ("FILTER OFF", Rect (kPedalX + 308 - 60, kPedalY + 266 - 8, 120, 16), juce::Justification::centred);
+            g.drawText ("FILTER OFF", Rect (kPedalX + 308 - 60, kPedalY + 252 - 8, 120, 16), juce::Justification::centred);
         }
     }
 
@@ -2579,8 +2525,8 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
     Lcd lcd;
     Chip* saveC = nullptr; Chip* skinC = nullptr;
     const Skin* currentSkin = nullptr; Chip* abC[2] { nullptr, nullptr }; Chip* bodyC = nullptr;
-    Led onLed { proc, "bypass", true, "Lit while the pedal is on." }, holdLed { proc, "holdOn", false, "Lit while a pad is held." };
-    FootSwitch onSw, holdSw;
+    Led onLed { proc, "bypass", true, "Lit while the pedal is on." };
+    FootSwitch onSw;
     DrawerTab drawer;
     std::vector<std::pair<Rect, Colour>> subBoxes;
     Knob* gateHold = nullptr; Knob* gateCut = nullptr;

@@ -298,11 +298,10 @@ int main (int argc, char** argv)
     setParam (proc, "smearOn", 1.f); setParam (proc, "motionOn", 1.f); setParam (proc, "bodyIr", 1.f);
     setParam (proc, "pickFilter", 0.4f); setParam (proc, "res", 0.3f);
     for (int rep = 0; rep < 3; ++rep) { t = 0; feedChord (proc, 0.9, t); pump (900); }
-    setParam (proc, "holdOn", 1.f);
     t = 0; feedChord (proc, 0.5, t); pump (500);
     shoot (e, out.getChildFile ("2_in_use.png"));
 
-    setParam (proc, "smearOn", 0.f); setParam (proc, "voiceOn", 0.f); setParam (proc, "filterOn", 0.f); setParam (proc, "holdOn", 0.f);
+    setParam (proc, "smearOn", 0.f); setParam (proc, "voiceOn", 0.f); setParam (proc, "filterOn", 0.f);
     pump (300);
     shoot (e, out.getChildFile ("3_modules_off.png"));
 
@@ -328,12 +327,12 @@ int main (int argc, char** argv)
         setParam (proc, "attack", 900.f); setParam (proc, "follow", 0.6f); setParam (proc, "mod", 0.55f); setParam (proc, "freq", 2500.f);
         setParam (proc, "bypass", 0.f); setParam (proc, "levelMatch", 1.f);
         // the live view: a chord 0.7 s into a 0.9 s swell
-        setParam (proc, "holdOn", 0.f); setParam (proc, "feedback", 0.f);
+        setParam (proc, "feedback", 0.f);
         pump (1200);
         t = 0;
         for (int i = 0; i < 14; ++i) { feedChord (proc, 0.05, t); pump (40); }   // audio running while the window animates
         shoot (e, out.getChildFile ("14_live.png"));
-        const char* ids[] = { "attack", "sustain", "touch", "follow", "feedback", "fbDistance", "vibDepth", "spread", "voiceMix", "holdFade", "smearSize", "levelMatch" };
+        const char* ids[] = { "attack", "sustain", "touch", "follow", "feedback", "fbDistance", "vibDepth", "spread", "voiceMix", "smearSize" };
         int n = 6;
         for (auto* id : ids)
         {

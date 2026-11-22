@@ -167,3 +167,14 @@ Midnight (the same on navy). A skin sets plate, logo, ink, the knobs' three ring
 window's glow (`SignalWindow::setSkin`; the effects' own colours stay). Pedal knobs (kinds 0/1) are ivory with three value
 rings (outer = lightest). Switch: SKIN chip in the top bar or gear > Skin; saved as `uiSkin` in the state.
 `ui_snapshot` writes `skin_0..2.png`. The effects panel keeps its dark look.
+
+## Cleanup for release (2026-11-22, owner)
+- HOLD removed entirely (parameters, `dsp/Hold.h`, test 33, footswitch, minis, window drawing): may become its own plugin.
+- Pedal face: no chip row. Swell curve (POG2 default, Classic, Bowed), MATCH and ATTACK tempo sync are in gear menu
+  submenus. Every preset uses the POG2 curve (`swellShape` 2) and none sets MATCH (the POG2's own gain is in its curve).
+- DETUNE WOBBLE removed (the POG2's copies are steady): the processor runs it at 0, the parameter stays for old sessions.
+- Knobs: one ring that fades through the skin's three colours (no overlap between neighbours). ON footswitch centred,
+  LED with room for its glow, logo placed by its visible part (the PNG has empty space under the rings).
+- The pedal's drop shadow is clipped outside the plate: JUCE 8's Direct2D renderer drew it over the plate (cream -> grey).
+- Release: GitHub repo https://github.com/Vinnerholt/PolySwell, `.github/workflows/build.yml` (Windows + macOS, release
+  on a `v*` tag), `pages.yml` (site/ -> GitHub Pages), AGPLv3.
