@@ -1370,6 +1370,21 @@ int main()
         check(pOff < -5.0, "without MATCH a 1 s swell ends well under the pick's level");
         check(pOn > -2.5 && pOn < 1.0, "MATCH: the swell ends about as loud as the pick, never louder");
         check(std::abs(sOn - sOff) < 0.5, "MATCH leaves a note that does not decay alone");
+
+        // a note whose upper partials fade fast: MATCH brings the note back up, not its 6th harmonic far above it
+        std::vector<float> rich((size_t) n, 0.f);
+        for (int i = t0; i < n; ++i)
+        {
+            const double t = (i - t0) / kSr;
+            rich[(size_t) i] = (float) (0.3 * std::sin(2 * kPi * 220.0 * i / kSr) * std::pow(10.0, -6.0 * t / 20.0)
+                                      + 0.1 * std::sin(2 * kPi * 1320.0 * i / kSr) * std::pow(10.0, -24.0 * t / 20.0));
+        }
+        const auto rOff = run(rich, off), rOn = run(rich, on);
+        const int tp = t0 + at(1.05) + kLatencySamples, w = at(0.1);
+        const double liftF = 20 * std::log10(amp(rOn.wet, tp, w, 220.0) / amp(rOff.wet, tp, w, 220.0));
+        const double liftH = 20 * std::log10(amp(rOn.wet, tp, w, 1320.0) / amp(rOff.wet, tp, w, 1320.0));
+        std::printf("  rich note at the end of a 1 s swell: MATCH lifts the fundamental %+.1f dB, the fast-fading 6th harmonic %+.1f dB\n", liftF, liftH);
+        check(std::abs(liftH - liftF) < 2.0, "MATCH lifts the whole note alike (the upper partials are not pushed above it)");
     }
 
     std::printf("Test 35: feedback, amp model (DISTANCE picks the harmonic, it takes over, one note wins, muting kills it)\n");

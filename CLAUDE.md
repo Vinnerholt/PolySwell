@@ -108,3 +108,26 @@ Approved mockup: https://claude.ai/artifact/EZmkrUJoXqKFvVsBdjZ8Yd (oxblood fini
 - POG2 measurement plan: `docs/POG2_TEST_PLAN.md`, test signal from `tools/pog2_testsignals.py`
   (`measurements/pog2_test_signals.wav` + `pog2_cues.json`; WAVs are gitignored). Analysis script still to write once
   recordings exist.
+
+## Round 4 (2026-11-22)
+- Only what PolySwell II shows is heard: the processor fixes the gen-1-only controls at neutral (DRIVE off, chorus, phaser,
+  vowel/scoop/breath/warmth/string/life/stab/voice RES+DECAY, drift, unison detune 15 c, PWM rate, tremolo sync, the
+  FEEL/DYN/PACE range+depth+tight+strum fine-tunes at their defaults, BLOOM pedal on). `gen2Defaults()` switches the
+  per-knob off switches back on after a session or user preset loads (gen 2 has no control for them; FEEDBACK's LED is
+  the one kept). The parameters stay so old sessions load.
+- SUSTAIN: fall rate 0.5 + 8 (1 - s)^1.3 dB/s (was 0.5 + 23.5 (1 - s)^2: nothing happened below ~0.43 on an 8 dB/s
+  string). PACE: the paced swell (0.4 x the gap) is blended in by PACE (was a cap from 2x to 0.4x the gap that did
+  nothing until it fell below ATTACK). GLIDE: long jumps slide faster (time / (1 + semitones / 7)) and leave quickly
+  (offset x^2.2). MATCH: one make-up per note (its energy at the pick vs now, `matchSlots` by note group), not per bin
+  (per bin lifted fast-fading upper partials and pick noise up to 18 dB: heard as drive); with MATCH the sustain hold
+  waits for the swell to end. `ui_snapshot --peaks`: every preset's peak with the limiter off (all under -5 dBFS).
+- UI: FEEDBACK knob moved into its module (FEEDBACK, DISTANCE, RISE, TONE); PLAYING = FEEL, PACE, EVEN; HOLD module
+  removed: FADE and LEVEL minis beside the HOLD footswitch, LATCH in its right-click menu. Panel: FILTER | FEEDBACK,
+  MOTION full width (each knob boxed with its own settings), LAYER | SPACE (gate + HOLD/CUT boxed, faded while off).
+  Fine tuning (filter slope, classic feedback overtone, MAX boost) moved to the gear menu.
+- Window: bigger plots (100 px), thicker lines, FEEL/PACE scaled to fill and FEEL zoomed in time; SPACE picture in dB so
+  SIZE shows; live view: the filter is a soft veil above the cutoff with the notes under it dimming (no line), the
+  SPACE tail length follows SIZE.
+- POG2: `tools/pog2_record.py` plays the test file out of the Apollo (ASIO via sounddevice) and records the pedal
+  back run by run (`--plan`), with `--ping`, `--meter` for setup.
+

@@ -538,16 +538,13 @@ void PolySwellProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
 
     // tremolo rate: knob, or locked to the tempo (fine-tune)
     float tremRate = pTremRate->load();
-    if (pTremSyncOn->load() > 0.5f)
-    {
-        const auto& d = tremDivs()[(size_t) juce::jlimit (0, (int) tremDivs().size() - 1, (int) std::lround (pTremDiv->load()))];
-        tremRate = (float) juce::jlimit (0.05, 30.0, bpm / 60.0 / d.second);
-    }
+    // (PolySwell II has no tremolo sync control: tremSyncOn / tremDiv are kept for old sessions but not used)
 
     swello::Params p;
     p.attackMs   = attackMs;
     // a pedal switched off with its footswitch acts as if all its knobs were at their neutral values
-    const bool bloom = ex.bloomOn->load() > 0.5f, motion = ex.motionOn->load() > 0.5f, voice = ex.voiceOn->load() > 0.5f;
+    const bool bloom = true,   // PolySwell II has no BLOOM footswitch
+               motion = ex.motionOn->load() > 0.5f, voice = ex.voiceOn->load() > 0.5f;
     const float bl = bloom ? 1.f : 0.f, mo = motion ? 1.f : 0.f;
     p.sustain    = effective (pSustain, pSustainOn, 0.f) * bl;
     p.freqHz     = pFreq->load();
@@ -555,15 +552,16 @@ void PolySwellProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     p.slope      = juce::jlimit (0, 3, (int) std::lround (pSlope->load()));
     p.filterMode = pFilter->load() > 0.5f ? 1 : 0;   // on / off; one RES
     p.resLow     = pResLow->load();
-    p.pickRangeDb  = pPickRange->load();
-    p.pickDepthOct = pPickDepth->load();
+    // PolySwell II: the gen-1 fine-tune values are fixed at their tuned defaults (no control for them)
+    p.pickRangeDb  = 9.f;
+    p.pickDepthOct = 4.f;
     p.touch      = effective (pTouch, pTouchOn, 0.f);
     p.follow     = effective (pFollow, pFollowOn, 0.f);
     p.feedback   = effective (pFeedback, pFeedbackOn, 0.f) * bl;
-    p.touchRangeDb  = pTouchRange->load();
-    p.touchDepthOct = pTouchDepth->load();
-    p.followTight   = pFollowTight->load();
-    p.chordGroupMs  = pChordMs->load();
+    p.touchRangeDb  = 12.f;
+    p.touchDepthOct = 2.f;
+    p.followTight   = 0.4f;
+    p.chordGroupMs  = 60.f;
     p.sustainMaxDb  = pSustainMax->load();
     p.fbHarmonic    = juce::jlimit (0, 3, (int) std::lround (pFbHarmonic->load()));   // 3 = sub octave
     p.fbRiseSec     = pFbRise->load();
@@ -579,21 +577,22 @@ void PolySwellProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     p.voiceGlide    = pGlide->load(); p.voiceMono = pMono->load() > 0.5f; p.vibHuman = pVibHuman->load() > 0.5f;
     p.voiceOct      = juce::jlimit (0, 2, (int) std::lround (ex.voiceOct->load()));
     p.voiceToneHz   = ex.voiceTone->load();
-    p.voicePwmRate  = ex.voicePwmRate->load();
-    p.voiceStab     = ex.voiceStab->load();
-    p.voiceWarmth   = pWarmth->load();
-    p.voiceRes      = pVRes->load();   p.voiceDecay = pVDecay->load();
-    const bool vocal = pVocalOn->load() > 0.5f;   // the VOCAL group's switch
-    p.voiceVowel    = vocal ? pVowel->load() : 0.f;
-    p.voiceVowelPick = pVowelPick->load();
-    p.voiceScoop    = vocal ? pScoop->load() : 0.f;
-    p.voiceBreath   = vocal ? pBreath->load() : 0.f;
+    // the voice controls PolySwell II does not show are neutral (CHARACTER drives the living ones)
+    p.voicePwmRate  = 0.8f;
+    p.voiceStab     = 0.f;
+    p.voiceWarmth   = 0.f;
+    p.voiceRes      = 0.f;   p.voiceDecay = 0.18f;
+    const bool vocal = true;
+    p.voiceVowel    = 0.f;
+    p.voiceVowelPick = 0.5f;
+    p.voiceScoop    = 0.f;
+    p.voiceBreath   = 0.f;
     // CHARACTER (macro): from a clean synth to an alive, vocal one - adds STRING, per-note wander, a vowel, scoop and
     // breath on top of their own knobs. DRIFT now means each note wandering on its own (LIFE folded in).
     const float chr = pCharacter->load();
-    const float drift = effective (ex.voiceDrift, pDriftOn, 0.f);
-    p.voiceString   = juce::jlimit (0.f, 1.f, pString->load() + 0.6f * chr);
-    p.voiceLife     = juce::jlimit (0.f, 1.f, juce::jmax (pLife->load(), drift) + 0.6f * chr);
+    const float drift = 0.f;
+    p.voiceString   = juce::jlimit (0.f, 1.f, 0.6f * chr);
+    p.voiceLife     = juce::jlimit (0.f, 1.f, 0.6f * chr);
     p.voiceScoop    = juce::jlimit (0.f, 1.f, p.voiceScoop + (vocal ? 0.3f * chr : 0.f));
     p.voiceBreath   = juce::jlimit (0.f, 1.f, p.voiceBreath + (vocal ? 0.25f * chr : 0.f));
     if (p.voiceVowel <= 0.001f && chr > 0.01f && vocal) p.voiceVowel = 0.05f + 0.45f * chr;   // "oh" .. "ah"
@@ -618,10 +617,10 @@ void PolySwellProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
 
     swello::VoiceFx::Settings vfx;
     vfx.unison   = effective (ex.voiceUnison, pUnisonOn, 0.f);
-    vfx.detune   = ex.voiceDetune->load();
+    vfx.detune   = 15.f;
     vfx.drift    = 0.4f * drift;   // a little whole-voice wow; the main DRIFT is per note (engine)
-    vfx.chorus   = juce::jlimit (0, 3, (int) std::lround (ex.voiceChorus->load()));
-    vfx.phaser   = effective (ex.voicePhaser, pPhaserOn, 0.f);
+    vfx.chorus   = 0;
+    vfx.phaser   = 0.f;
     vfx.supersaw = p.voiceWave == 0;
     mixSmooth.setTargetValue (voiceMix);
     p.fbMode        = juce::jlimit (0, 1, (int) std::lround (pFbMode->load()));
@@ -684,7 +683,7 @@ void PolySwellProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     swello::Drive::Settings dvs;
     dvs.type = (int) std::lround (pDriveType->load()); dvs.drive = pDriveAmt->load();
     dvs.tone = pDriveTone->load(); dvs.wow = pDriveWow->load();
-    driveMixSmooth.setTargetValue (pDriveOn->load() > 0.5f ? 1.f : 0.f);
+    driveMixSmooth.setTargetValue (0.f);   // PolySwell II has no DRIVE (a preset or old session can not switch it on)
 
     // ---- pass 1: engine, voice, detune, DRIVE -> wetBuf (dry -> dryBuf). DRIVE comes before the BODY IR, like an amp
     //      before a cab: a driven, sustained string into a violin body is what makes it sound bowed.
@@ -1031,8 +1030,16 @@ bool PolySwellProcessor::loadUserPreset (const juce::File& file)
     }
     if (! hasNewFilter) convertOldFilter();
     currentPresetName = xml->getStringAttribute ("name", file.getFileNameWithoutExtension());
+    gen2Defaults();
     userPresetLoaded = true;
     return true;
+}
+
+// PolySwell II has no per-knob off switches and no BLOOM footswitch: an old session or preset must not leave one off
+void PolySwellProcessor::gen2Defaults()
+{
+    for (const auto& s : switchables()) if (juce::String (s.onId) != "feedbackOn") setParam (s.onId, 1.f);
+    setParam ("bloomOn", 1.f);
 }
 
 juce::AudioProcessorEditor* PolySwellProcessor::createEditor() { return new PolySwellEditor (*this); }
@@ -1091,6 +1098,7 @@ void PolySwellProcessor::setStateInformation (const void* data, int size)
             const bool hasNewFilter = vt.getChildWithProperty ("id", "filterOn").isValid();
             apvts.replaceState (vt);
             if (! hasNewFilter) convertOldFilter();
+            gen2Defaults();
         }
 }
 

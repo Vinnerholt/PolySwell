@@ -45,7 +45,8 @@ namespace tuning
     // holdDecay(SUSTAIN) dB/s; the shortfall is made up, so notes ring longer but never get louder than
     // their own peak. Fast level wiggles (beating, vibrato) pass through untouched.
     constexpr float sustainSlowDbPerSec = 0.5f;  // SUSTAIN = 1: decay rate of the held level
-    constexpr float sustainFastDbPerSec = 24.0f; // SUSTAIN -> 0: approaches this (= barely any hold)
+    constexpr float sustainFastDbPerSec = 8.5f;  // SUSTAIN -> 0: approaches this (a plucked string falls ~8 dB/s, so
+    constexpr float sustainCurve      = 1.3f;    //   every step of the knob is heard; it used to start acting at ~0.43)
     constexpr float sustainEnvMs      = 300.0f;  // smoothing of the level that gets held (the decay trend)
     constexpr float sustainFloor      = 5e-4f;   // no boost near the noise floor
 
@@ -682,7 +683,7 @@ private:
         ++frameCount;
         // SUSTAIN: decay rate of the held level (dB/s -> per-frame factor) and the allowed boost
         const float holdDb    = tuning::sustainSlowDbPerSec
-                              + (tuning::sustainFastDbPerSec - tuning::sustainSlowDbPerSec) * (1.f - sus) * (1.f - sus);
+                              + (tuning::sustainFastDbPerSec - tuning::sustainSlowDbPerSec) * std::pow(1.f - sus, tuning::sustainCurve);
         const float holdDecay = std::pow(10.0f, -holdDb * dt / 20.0f);
         const float maxBoost  = std::pow(10.0f, params.sustainMaxDb * sus / 20.0f);
         const float fbMaxBoost = std::pow(10.0f, params.sustainMaxDb / 20.0f);   // MAX caps sustain and feedback holds
@@ -730,6 +731,23 @@ private:
             if (onsetBin[i]) onsetEnergy += m * m;
         }
         noteEvents(onsetEnergy, T);   // groups onsets into note events, sets attackMul for the current one
+
+        // MATCH per note, not per bin: a note's energy at its pick against its energy now. Per bin, the upper partials
+        // and the pick noise (which fade much faster than the fundamental) were lifted up to 18 dB above where the string
+        // left them, and that sounded like grit / drive. Per note, the loudness comes back and the tone fades naturally.
+        if (params.levelMatch)
+        {
+            for (auto& sl : matchSlots) { sl.id = 0; sl.pick = sl.now = 0.f; }
+            for (int k = 0; k < kBins; ++k)
+            {
+                const size_t i = (size_t) k;
+                if (! active[i] || binGroup[i] == 0 || phase[i] >= 1.f || matchPeak[i] <= 0.f) continue;
+                auto& sl = matchSlots[(size_t) (binGroup[i] & 63u)];
+                if (sl.id != binGroup[i]) { sl.id = binGroup[i]; sl.pick = sl.now = 0.f; }
+                const float now = 0.5f * (env[i] + mag[i]);
+                sl.pick += matchPeak[i] * matchPeak[i]; sl.now += now * now;
+            }
+        }
 
         for (int k = 0; k < kBins; ++k)
         {
@@ -781,7 +799,9 @@ private:
             ref[i]    = (ms > ref[i])    ? ms : ref[i]    * refDecay;
             refRaw[i] = (m  > refRaw[i]) ? m  : refRaw[i] * refRawDecay;
             env[i] += (m - env[i]) * envCoef;                  // smoothed level: the decay trend, not wiggles
-            hold[i] = std::max(env[i], hold[i] * holdDecay);   // may fall no faster than holdDb
+            // may fall no faster than holdDb. With MATCH the held level waits for the swell to end, so SUSTAIN's slow
+            // fade starts from the matched level (it used to start at the pick: a fast fall, then a bend into the slow one)
+            hold[i] = (params.levelMatch && phase[i] < 1.f) ? std::max(env[i], hold[i]) : std::max(env[i], hold[i] * holdDecay);
 
             // 2) attack gain
             const float ph = phase[i];
@@ -816,7 +836,12 @@ private:
             {
                 // against the mean of the smoothed and the current level: the smoothed one alone lags a decaying note
                 // by ~2 dB (300 ms), the current one alone wobbles with string beating
-                if (ph < 1.f && env[i] > 1e-9f) matchGain[i] = std::clamp(matchPeak[i] / (0.5f * (env[i] + m)), 1.f, tuning::matchMaxBoost);
+                if (ph < 1.f && env[i] > 1e-9f)
+                {
+                    const auto& sl = matchSlots[(size_t) (binGroup[i] & 63u)];
+                    matchGain[i] = (binGroup[i] != 0 && sl.id == binGroup[i] && sl.now > 1e-20f)
+                                 ? std::clamp(std::sqrt(sl.pick / sl.now), 1.f, tuning::matchMaxBoost) : 1.f;   // stray bins: none
+                }
                 boost = std::max(boost, 1.f + (matchGain[i] - 1.f) * ph);
             }
             fbDuck[i] = (fbOn && fbTakeover > 0.f) ? 1.f - fbTakeover * fbBloom(i) : 1.f;
@@ -1295,7 +1320,11 @@ private:
         {
             Track& g = next[newIdx[0]];
             const float d = std::log2(lastLeadHz / g.hz);
-            if (std::abs(d) > 0.04f && std::abs(d) < 1.05f) { g.glideOct = d; g.glideLeft = 1.f; }
+            if (std::abs(d) > 0.04f && std::abs(d) < 1.05f)
+            {
+                // long jumps slide faster (as a player does): 2 semitones 78 %, a fifth 50 %, an octave 37 % of GLIDE
+                g.glideOct = d; g.glideLeft = 1.f; g.glideTime = 1.f / (1.f + 12.f * std::abs(d) / 7.f);
+            }
         }
         // tracks that vanished fade out over a few frames instead of stopping dead
         for (int t = 0; t < numTracks && nn < kMaxTracks; ++t)
@@ -1348,9 +1377,9 @@ private:
             float glideF = 1.f;
             if (tr.glideLeft > 0.f)
             {
-                if (tr.confirmedAt >= 0) tr.glideLeft = std::max(0.f, tr.glideLeft - frameSec / std::max(params.voiceGlide, 0.01f));
+                if (tr.confirmedAt >= 0) tr.glideLeft = std::max(0.f, tr.glideLeft - frameSec / std::max(params.voiceGlide * tr.glideTime, 0.01f));
                 const float x = tr.glideLeft;
-                glideF = std::exp2(tr.glideOct * x * x * (3.f - 2.f * x));   // eases from the old pitch into the new
+                glideF = std::exp2(tr.glideOct * std::pow(x, 2.2f));   // leaves the old pitch quickly, eases into the new one
             }
             const float  kBase = tr.hz / binHz * octR * vibFactor(s) * scoopF * lifeF * glideF;
             tr.ph = wrapPi(tr.ph + expected * kBase);
@@ -1580,8 +1609,10 @@ private:
         float Tn = T * std::exp2(-params.touch * strength * params.touchDepthOct);
         if (params.follow > 0.f && gapSec < tuning::followMaxGapSec && gapSec >= tuning::followMinGapSec)
         {
-            const float frac = tuning::followFracLoose + (params.followTight - tuning::followFracLoose) * params.follow;
-            Tn = std::min(Tn, frac * gapSec);
+            // the swell this pace allows (followTight x the time since the last note), blended in by PACE: every step of
+            // the knob shortens fast notes a bit more (a cap from 2x to 0.4x the gap did nothing until it fell below ATTACK)
+            const float paced = std::min(Tn, params.followTight * gapSec);
+            Tn += (paced - Tn) * params.follow;
         }
         Tn = std::clamp(Tn, 0.010f, 6.f);
         groupMul = Tn / T;
@@ -1663,7 +1694,7 @@ private:
     {
         float hz = 0.f, ph = 0.f, amp = 0.f; int age = 0, lost = 0;
         int seen = 0, confirmedAt = -1, midiNote = -1, midiCh = 0, lastBend = 8192; uint32_t id = 0;
-        float glideOct = 0.f, glideLeft = 0.f, monoGain = 1.f;      // GLIDE: start offset (octaves) and what is left; MONO fade
+        float glideOct = 0.f, glideLeft = 0.f, glideTime = 1.f, monoGain = 1.f;      // GLIDE: start offset (octaves) and what is left; MONO fade
         std::array<float, kMaxHarm + 1> bowJit {};                            // BOW: each harmonic's wandering phase (slip-stick)
         // LIFE: this note's own slow wander (current value and target): pitch in cents, tone in octaves, level in dB
         float lp = 0.f, lpT = 0.f, lt = 0.f, ltT = 0.f, la = 0.f, laT = 0.f, pwOff = 0.f; int lifeCount = 0;
@@ -1776,7 +1807,9 @@ private:
     std::array<float, kBins> fbDuck {};
     float fbRatioA = 0.f, fbRatioB = 0.f, fbWeightA = 1.f, fbWeightB = 0.f, fbTakeover = 0.f, fbDriftNow = 0.f, fbDriftTarget = 0.f;
     int fbDriftCount = 0; uint32_t fbRng = 0x2468aceu;
-    std::array<float, kBins> matchPeak {}, matchGain {};   // level-matched swell: the pick's level, the make-up found
+    std::array<float, kBins> matchPeak {}, matchGain {};
+    struct MatchSlot { uint32_t id = 0; float pick = 0.f, now = 0.f; };
+    std::array<MatchSlot, 64> matchSlots {};   // level-matched swell: the pick's level, the make-up found
     std::array<float, kBins> magPrev {}, binEven {}, repickFloor {}, bodyGain {};   // last frame's magnitude (smooth re-pick), EVEN gain per note   // BREATH: amplitude collected per bin, its slowly wandering phase
     std::atomic<int> voicePubCount { 0 };
     std::atomic<float> noteAttackPub { 0.3f }, noteStrengthPub { 0.f }, frameSecPub { 0.f }, notePanPub { 0.f }, pickStrengthPub { 0.f };

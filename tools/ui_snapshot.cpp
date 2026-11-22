@@ -159,6 +159,51 @@ static void runLevels()
     for (auto& c : cases) std::printf ("  %-28s %+5.1f dB\n", c.first, rmsDb (c.second) - ref);
 }
 
+// --peaks: each preset's output peak over strummed chords with the limiter off (> -0.3 dBFS = the limiter would act)
+static void runPeaks()
+{
+    constexpr double sr = 44100.0, pi = 3.14159265358979323846;
+    constexpr int block = 128;
+    const double f0[] = { 82.4, 123.5, 164.8, 207.7, 246.9, 329.6 };
+    const int programs = std::make_unique<PolySwellProcessor>()->getNumPrograms();   // (on the heap: the engines are large)
+    for (int pr = 0; pr < programs; ++pr)
+    {
+        auto procPtr = std::make_unique<PolySwellProcessor>();
+        auto& proc = *procPtr;
+        proc.setPlayConfigDetails (2, 2, sr, block);
+        proc.prepareToPlay (sr, block);
+        proc.setCurrentProgram (pr);
+        setParam (proc, "limiter", 0.f);
+        juce::AudioBuffer<float> buf (2, block);
+        juce::MidiBuffer midi;
+        double t = 0.0, peak = 0.0, inPeak = 0.0; long over = 0, n = 0;
+        for (int b = 0; b < (int) (sr * 8.0) / block; ++b)
+        {
+            for (int i = 0; i < block; ++i, t += 1.0 / sr)
+            {
+                const double tc = std::fmod (t, 2.0);
+                double v = 0;
+                for (int s = 0; s < 6; ++s)
+                {
+                    const double ts = tc - s * 0.012;
+                    if (ts < 0) continue;
+                    for (int h = 1; h <= 6; ++h) v += 0.05 / h * std::sin (2 * pi * f0[s] * h * t) * std::exp (-ts * (1.2 + h * 0.4));
+                }
+                inPeak = std::max (inPeak, std::abs (v));
+                buf.setSample (0, i, (float) v); buf.setSample (1, i, (float) v);
+            }
+            proc.processBlock (buf, midi);
+            for (int i = 0; i < block; ++i)
+            {
+                const double p = std::max (std::abs (buf.getSample (0, i)), std::abs (buf.getSample (1, i)));
+                peak = std::max (peak, p); over += p > 0.97 ? 1 : 0; ++n;
+            }
+        }
+        std::printf ("  %-22s peak %+6.1f dBFS (input %+5.1f)  over the limiter %5.2f %%\n", proc.getProgramName (pr).toRawUTF8(),
+                     20 * std::log10 (peak + 1e-9), 20 * std::log10 (inPeak), 100.0 * (double) over / (double) n);
+    }
+}
+
 static void pump (int ms) { juce::MessageManager::getInstance()->runDispatchLoopUntil (ms); }
 
 int main (int argc, char** argv)
@@ -166,6 +211,7 @@ int main (int argc, char** argv)
     juce::ScopedJuceInitialiser_GUI init;
     if (argc > 1 && juce::String (argv[1]) == "--bench") { runBench(); return 0; }
     if (argc > 1 && juce::String (argv[1]) == "--levels") { runLevels(); return 0; }
+    if (argc > 1 && juce::String (argv[1]) == "--peaks") { runPeaks(); return 0; }
     if (argc > 2 && juce::String (argv[2]) == "--fonts")
     {
         for (auto& st : juce::Font::findAllTypefaceStyles ("Bahnschrift")) std::printf ("style: %s\n", st.toRawUTF8());

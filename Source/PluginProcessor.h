@@ -128,6 +128,7 @@ private:
     std::atomic<int> ccLearn { -1 };
     void handleCc (int cc, int value);
     void applyNewPreset (int index);
+    void gen2Defaults();
     swello::Hold hold;                      // HOLD: spectral freeze of what is ringing, added after SMEAR
     std::atomic<float> *pHoldOn = nullptr, *pHoldFade = nullptr, *pHoldLevel = nullptr;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> holdLevelSmooth;
