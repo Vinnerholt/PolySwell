@@ -684,7 +684,7 @@ struct SignalWindow : juce::Component, juce::Timer
             { "vibDepth", 3 }, { "vibRate", 3 }, { "vibDelay", 3 }, { "vibHuman", 3 }, { "vibTarget", 3 },
             { "tremolo", 4 }, { "tremRate", 4 }, { "tremShape", 4 },
             { "spread", 5 }, { "spreadMode", 5 },
-            { "detune", 6 }, { "detuneWobble", 6 },
+            { "detune", 6 }, { "detuneWobble", 6 }, { "detuneMix", 6 },
             { "voiceMix", 7 }, { "voiceTone", 7 }, { "voiceWave", 7 }, { "voiceOct", 7 }, { "voiceUnison", 7 }, { "voiceMono", 7 },
             { "voiceGlide", 7 }, { "voiceCharacter", 7 },
             { "holdFade", 8 }, { "holdLevel", 8 }, { "holdLatch", 8 },
@@ -843,13 +843,20 @@ struct SignalWindow : juce::Component, juce::Timer
             {
                 const float k = juce::jmin (8.f, 1.f / natural (u));
                 const float l = juce::jmax (juce::jmin (P ("sustainMax") * s, (8.f - rate) * u), 20.f * std::log10 (1.f + (k - 1.f) * juce::jmin (1.f, u / attack)));
-                return std::pow (10.f, (-8.f * u + l) / 20.f) * swellGain (u / attack, P ("swellShape") > 0.5f);
+                return std::pow (10.f, (-8.f * u + l) / 20.f) * swellGain (u / attack, juce::roundToInt (P ("swellShape")));
             };
             if (t <= attack) return during (t);
             // after the swell: from the matched level, at SUSTAIN's rate (or the string's own, without SUSTAIN)
             return during (attack) * std::pow (10.f, -rate * (t - attack) / 20.f);
         }
-        return std::pow (10.f, (-8.f * t + lift) / 20.f) * swellGain (attack < 0.002f ? 1.f : t / attack, P ("swellShape") > 0.5f);
+        return pogGain (attack) * std::pow (10.f, (-8.f * t + lift) / 20.f) * swellGain (attack < 0.002f ? 1.f : t / attack, juce::roundToInt (P ("swellShape")));
+    }
+    // the POG2 shape's own make-up gain (as the engine; none with MATCH)
+    float pogGain (float attack) const
+    {
+        if (juce::roundToInt (P ("swellShape")) != 2 || P ("levelMatch") > 0.5f || attack < 0.002f) return 1.f;
+        const float tau = juce::jmax (attack / 3.f, 1.0e-3f);
+        return std::pow (10.f, juce::jlimit (0.f, 13.f, 5.75f + 4.83f * (std::log10 (tau) + 0.745f)) / 20.f);
     }
     // PACE, as the engine: the swell fast playing allows (0.4 x the time since the last note), blended in by PACE
     float pacedAttack (float A, float gap) const
@@ -1000,9 +1007,9 @@ struct SignalWindow : juce::Component, juce::Timer
         const float vol = id == "vol" ? juce::Decibels::decibelsToGain (P ("vol")) : 1.f;
         if (id == "vol") dashed (g, curve (pl, 0.f, [&] (float t) { return swelled (t, A); }), amberC.withAlpha (0.45f));
         if (id == "levelMatch" && P ("levelMatch") > 0.5f)      // dashed: the same swell without MATCH
-            dashed (g, curve (pl, 0.f, [&] (float t) { return natural (t) * swellGain (A < 0.002f ? 1.f : t / A, P ("swellShape") > 0.5f); }), amberC.withAlpha (0.5f));
+            dashed (g, curve (pl, 0.f, [&] (float t) { return natural (t) * swellGain (A < 0.002f ? 1.f : t / A, juce::roundToInt (P ("swellShape"))); }), amberC.withAlpha (0.5f));
         if (id == "sustain" || id == "sustainMax")              // dashed: the same note without SUSTAIN
-            dashed (g, curve (pl, 0.f, [&] (float t) { return natural (t) * swellGain (A < 0.002f ? 1.f : t / A, P ("swellShape") > 0.5f); }), amberC.withAlpha (0.45f));
+            dashed (g, curve (pl, 0.f, [&] (float t) { return natural (t) * swellGain (A < 0.002f ? 1.f : t / A, juce::roundToInt (P ("swellShape"))); }), amberC.withAlpha (0.45f));
         glowLine (g, curve (pl, 0.f, [&] (float t) { return vol * swelled (t, A); }), amberC, &pl);
         markAt (g, pl, A, amberC);
         if (id == "dry")
@@ -1030,7 +1037,11 @@ struct SignalWindow : juce::Component, juce::Timer
         if (id == "sustain" || id == "sustainMax") return P ("sustain") > 0.005f ? "the note fades more slowly than the guitar (dashed: without)" : "off: the note fades like the guitar";
         if (id == "vol") return "output level (dashed: 0 dB)";
         if (id == "levelMatch") return P ("levelMatch") > 0.5f ? "the swell ends as loud as the pick was (dashed: without)" : "off: a long swell ends quieter than the pick";
-        if (id == "swellShape") return P ("swellShape") > 0.5f ? "bowed: a slower, S-shaped start" : "classic: the pedal's curve";
+        if (id == "swellShape")
+        {
+            const int sh = juce::roundToInt (P ("swellShape"));
+            return sh == 2 ? "POG2: a fast start that eases in, with the pedal's own gain" : sh == 1 ? "bowed: a slower, S-shaped start" : "classic: slow start, then faster";
+        }
         if (id == "smoothRepick") return "re-picking a ringing note: it dips a little instead of starting from silence";
         return A < 0.002f ? String ("no swell: the note starts at once") : "each note fades in over " + ms (A);
     }
@@ -1060,7 +1071,8 @@ struct SignalWindow : juce::Component, juce::Timer
             {
                 const float f = fLo * std::pow (fHi / fLo, (float) i / 160.f), r = f / cut, r2 = r * r;
                 float h2 = slope == 0 ? 1.f / (1.f + r2) : 1.f / ((1.f - r2) * (1.f - r2) + r2 / (q * q));
-                if (slope >= 2) h2 /= (1.f + r2 * r2);
+                if (slope == 4) h2 /= (1.f + r2);
+                else if (slope >= 2) h2 /= (1.f + r2 * r2);
                 if (slope == 3) h2 /= (1.f + r2 * r2) * (1.f + r2 * r2);
                 const float y = Y (10.f * std::log10 (h2 + 1.0e-9f));
                 if (i == 0) p.startNewSubPath (X (f), y); else p.lineTo (X (f), y);
@@ -2030,7 +2042,7 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
                 }
                 else if (c == 1) stack = { valueChip ("tremRate", "RATE", 0, ac, g), chip (Chip::menu, "tremShape", "", ac, "Tremolo shape.", g) };
                 else if (c == 2) stack = { chip (Chip::menu, "spreadMode", "", ac, "How SPREAD places the notes.", g) };
-                else stack = { valueChip ("detuneWobble", "WOBBLE", 0, ac, g) };
+                else stack = { valueChip ("detuneMix", "MIX", 0, ac, g), valueChip ("detuneWobble", "WOBBLE", 0, ac, g) };
                 float y = r.getY() + 123.f;
                 for (auto* comp : stack) { comp->setTopLeftPosition (juce::roundToInt (cx - (float) comp->getWidth() * 0.5f), juce::roundToInt (y)); y += 25.f; }
             }

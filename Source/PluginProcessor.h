@@ -131,7 +131,7 @@ private:
     void gen2Defaults();
     swello::Hold hold;                      // HOLD: spectral freeze of what is ringing, added after SMEAR
     std::atomic<float> *pHoldOn = nullptr, *pHoldFade = nullptr, *pHoldLevel = nullptr;
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> holdLevelSmooth;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> holdLevelSmooth, detuneMixSmooth;
     swello::Drive drive;                    // DRIVE: tape / tube saturation, after the body IR, before SMEAR
     juce::dsp::Convolution bodyConv { juce::dsp::Convolution::NonUniform { 256 } };   // BODY IR (zero latency)
     juce::AudioBuffer<float> wetBuf, convBuf, dryBuf;   // the block between the two passes (around the convolution)

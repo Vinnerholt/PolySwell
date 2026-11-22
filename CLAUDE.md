@@ -131,3 +131,22 @@ Approved mockup: https://claude.ai/artifact/EZmkrUJoXqKFvVsBdjZ8Yd (oxblood fini
 - POG2: `tools/pog2_record.py` plays the test file out of the Apollo (ASIO via sounddevice) and records the pedal
   back run by run (`--plan`), with `--ping`, `--meter` for setup.
 
+## POG2 measurements and model (2026-11-22)
+Recorded through the owner's EHX POG2 (effects side only: ATTACK, LP FILTER, DETUNE; DRY FX amber, DRY OUTPUT max =
+unity) with `tools/pog2_record.py --out 1` (Line Out 3 mirrors the monitor mix on this Apollo; Hi-Z monitor muted or it
+feeds back). Analysis `tools/pog2_analyze.py` -> `measurements/pog2_results.json`; model check `tools/pog2_compare.py`
+against renders from `ui_snapshot --render`. Findings:
+- Delay 19 ms (DRY FX on), band limit ~7 kHz, no dependence on playing level, per note (a second note leaves a held one
+  alone), fast re-picks (125-250 ms) do not restart the swell. DRY FX off = untouched dry.
+- ATTACK: level = A (1 - e^(-t/tau)) (fit error ~1.5 %), tau 14 ms (0) / 16 / 31 / 72 / 166 ms (1/2) / 1.45 s (3/4) /
+  >= 4 s (top). The gain A grows with tau (dB = 5.75 + 4.83 (log10 tau + 0.745)): plucks come back to about their
+  pick level, held notes come out 6-12 dB louder. Noise and dense spectra get damped during long swells (per band).
+- LP FILTER: third-order Butterworth (-17..-18 dB/oct, Q 1 in its 2-pole part); -3 dB at 123 Hz (0), 247 (1/4),
+  830 (1/2), 3.5 kHz (3/4), open (top).
+- DETUNE: two steady copies at +-10.1 cents; the slider is their level (-18 dB at 3/8, -5..-7 dB at 1/2, the original
+  gone at the top), mono.
+Model in PolySwell: swell shape POG2 (`swellShape` 2: (1 - e^(-3 ph)) / (1 - e^-3), tau = ATTACK / 3, plus the
+measured gain unless MATCH is on; test 36), ATTACK up to 8 s, filter slope 18 dB/oct (`slope` 4; RES 0.23 = Q 1),
+DETUNE MIX (`detuneMix`, 0.5 = the old fixed blend), preset "POG2 swell" fitted to the owner's G1 setting: held notes
+within ~2 dB, plucks within ~4 dB (the POG2 holds a pluck a little longer), detune within 3 dB.
+

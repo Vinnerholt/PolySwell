@@ -204,6 +204,48 @@ static void runPeaks()
     }
 }
 
+// --render <in.wav> <out.wav> <preset name> [param=value ...]: the file through the whole plugin (0.5 s of silence first, as
+// tools/pog2_record.py plays it), mono out. For comparing PolySwell with the POG2 recordings (tools/pog2_compare.py).
+static int runRender (int argc, char** argv)
+{
+    if (argc < 5) { std::printf ("--render <in.wav> <out.wav> <preset> [id=value ...]\n"); return 1; }
+    juce::AudioFormatManager fm; fm.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> rd (fm.createReaderFor (juce::File (juce::String (argv[2]))));
+    if (rd == nullptr) { std::printf ("can not read %s\n", argv[2]); return 1; }
+    const double sr = rd->sampleRate; const int block = 256, pad = (int) (0.5 * sr);
+    const int n = (int) rd->lengthInSamples;
+    juce::AudioBuffer<float> in (1, n + pad); in.clear();
+    rd->read (&in, pad, n, 0, true, false);
+    auto procPtr = std::make_unique<PolySwellProcessor>(); auto& proc = *procPtr;
+    proc.setPlayConfigDetails (1, 2, sr, block);
+    proc.prepareToPlay (sr, block);
+    const juce::String want (argv[4]);
+    for (int i = 0; i < proc.getNumPrograms(); ++i) if (proc.getProgramName (i) == want) proc.setCurrentProgram (i);
+    for (int k = 5; k < argc; ++k)
+    {
+        const juce::String kv (argv[k]);
+        setParam (proc, kv.upToFirstOccurrenceOf ("=", false, false).toRawUTF8(), kv.fromFirstOccurrenceOf ("=", false, false).getFloatValue());
+    }
+    juce::AudioBuffer<float> out (1, n + pad), buf (2, block);
+    juce::MidiBuffer midi;
+    for (int pos = 0; pos < n + pad; pos += block)
+    {
+        const int len = std::min (block, n + pad - pos);
+        buf.clear();
+        buf.copyFrom (0, 0, in, 0, pos, len);
+        proc.processBlock (buf, midi);
+        for (int i = 0; i < len; ++i) out.setSample (0, pos + i, 0.5f * (buf.getSample (0, i) + buf.getSample (1, i)));
+    }
+    const juce::File of { juce::String (argv[3]) }; of.deleteFile();
+    std::unique_ptr<juce::FileOutputStream> os (of.createOutputStream());
+    std::unique_ptr<juce::AudioFormatWriter> wr (juce::WavAudioFormat().createWriterFor (os.get(), sr, 1, 24, {}, 0));
+    if (wr == nullptr) return 1;
+    os.release();
+    wr->writeFromAudioSampleBuffer (out, 0, out.getNumSamples());
+    std::printf ("rendered %s with \"%s\" (latency %d samples)\n", argv[3], want.toRawUTF8(), proc.getLatencySamples());
+    return 0;
+}
+
 static void pump (int ms) { juce::MessageManager::getInstance()->runDispatchLoopUntil (ms); }
 
 int main (int argc, char** argv)
@@ -212,6 +254,7 @@ int main (int argc, char** argv)
     if (argc > 1 && juce::String (argv[1]) == "--bench") { runBench(); return 0; }
     if (argc > 1 && juce::String (argv[1]) == "--levels") { runLevels(); return 0; }
     if (argc > 1 && juce::String (argv[1]) == "--peaks") { runPeaks(); return 0; }
+    if (argc > 1 && juce::String (argv[1]) == "--render") return runRender (argc, argv);
     if (argc > 2 && juce::String (argv[2]) == "--fonts")
     {
         for (auto& st : juce::Font::findAllTypefaceStyles ("Bahnschrift")) std::printf ("style: %s\n", st.toRawUTF8());

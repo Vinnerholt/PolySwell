@@ -64,6 +64,12 @@ namespace tuning
     constexpr float bowedK            = 3.1f;    // BOWED swell: attack spans 0.5 s / 0.161 s time constants (measured)
     constexpr float bowedExp          = 2.45f;   // BOWED swell exponent (measured S-curve)
     constexpr float bodyMakeupDb      = 3.0f;    // BODY: +3 dB so the 1..5 kHz range stays near 0 dB (the bump goes to +3)
+    // POG2 swell (measured from an EHX POG2, docs/POG2_TEST_PLAN.md, 2026-11-22): the level rises as 1 - e^(-t/tau),
+    // reaching 95 % at ATTACK (tau = ATTACK / 3), and the pedal adds a fixed gain that grows with tau, so plucked notes
+    // come back to about their pick level (held notes come out louder): +2.3 dB at tau 31 ms, +5.9 dB at 166 ms,
+    // +9.9 dB at 1.45 s. Fit: dB = 5.75 + 4.83 (log10(tau) + 0.745), 0..13 dB.
+    constexpr float pogK              = 3.0f;
+    constexpr float pogGainDb0        = 5.75f, pogGainSlope = 4.83f, pogGainLogRef = -0.745f, pogGainMaxDb = 13.0f;
     constexpr float matchMaxBoost     = 8.0f;    // level-matched swell: at most +18 dB of make-up
     constexpr float matchPeakFrom     = 0.03f;   // ... the pick's level is the loudest frame 30..110 ms after the onset
     constexpr float matchPeakSec      = 0.11f;   //     (the first frames hold the pick's click spread over many bins)
@@ -101,7 +107,7 @@ namespace tuning
 struct Params
 {
     float attackMs   = 300.0f;   // 0 .. 3000 (0 = no swell: notes start at full level)
-    int   swellShape = 0;        // 0 classic (phase^2), 1 bowed (VG-8 measured S-curve, see swellGain)
+    int   swellShape = 0;        // 0 classic (phase^2), 1 bowed (VG-8 measured S-curve), 2 POG2 (measured, see tuning)
     bool  levelMatch = false;    // the swell ends as loud as the pick was (makes up the string's decay during ATTACK)
     bool  smoothRepick = false;  // a re-pick over a ringing note re-swells from the level it has, not from silence
     float even       = 0.0f;     // 0 .. 1: EVEN, picks levelled towards the average (VG-8 DYNAMICS 100 = 0 here)
@@ -113,7 +119,7 @@ struct Params
     float sustain    = 0.0f;     // 0 .. 1
     float freqHz     = 2000.0f;  // LPF cutoff / sweep end
     float mod        = 0.0f;     // -1 .. 1  (0 = noon = no modulation)
-    int   slope      = 1;        // 0: 6, 1: 12, 2: 24, 3: 48 dB/oct
+    int   slope      = 1;        // 0: 6, 1: 12, 2: 24, 3: 48, 4: 18 dB/oct (the POG2's, measured)
     int   filterMode = 0;        // 0 off (green), 1 low res (orange), 2 high res (red)
     float resLow     = 0.0f;     // 0 .. 1 (0 = no resonance)
     float resHigh    = 0.65f;    // 0 .. 1
@@ -501,6 +507,7 @@ public:
     {
         if (ph >= 1.f) return 1.f;
         if (ph <= 0.f) return 0.f;
+        if (shape == 2) return (1.f - std::exp(-tuning::pogK * ph)) / (1.f - std::exp(-tuning::pogK));
         if (shape != 1) return ph * ph;
         const float y = (1.f - std::exp(-tuning::bowedK * ph)) / (1.f - std::exp(-tuning::bowedK));
         return std::pow(y, tuning::bowedExp);
@@ -508,6 +515,7 @@ public:
     static float swellPhaseFor(float g, int shape)   // inverse of swellGain
     {
         g = std::clamp(g, 0.f, 1.f);
+        if (shape == 2) return std::clamp(-std::log(1.f - g * (1.f - std::exp(-tuning::pogK))) / tuning::pogK, 0.f, 1.f);
         if (shape != 1) return std::sqrt(g);
         const float y = std::pow(g, 1.f / tuning::bowedExp);
         return std::clamp(-std::log(1.f - y * (1.f - std::exp(-tuning::bowedK))) / tuning::bowedK, 0.f, 1.f);
@@ -806,6 +814,13 @@ private:
             // 2) attack gain
             const float ph = phase[i];
             float g = swellGain(ph, params.swellShape) * binEven[i];
+            // POG2: the pedal's own make-up gain for this note's swell time (not with MATCH, which does the same job per note)
+            if (params.swellShape == 2 && ! params.levelMatch && T > 0.f)
+            {
+                const float tau = std::max(T * attackMul[i] / tuning::pogK, 1.0e-3f);
+                const float db = std::clamp(tuning::pogGainDb0 + tuning::pogGainSlope * (std::log10(tau) - tuning::pogGainLogRef), 0.f, tuning::pogGainMaxDb);
+                g *= std::pow(10.f, db / 20.f);
+            }
             if (params.bowedBody) g *= bodyGain[i];
             if (repickFloor[i] > 0.f)
             {
@@ -1147,7 +1162,7 @@ private:
         {
             const float res = 1.f / std::sqrt((1.f - r2) * (1.f - r2) + r2 * invQ * invQ);
             const float flat = params.slope == 1 ? 1.f : 1.f / std::sqrt(1.f + r2 * r2);
-            m = params.slope == 1 ? res : params.slope == 2 ? res * flat : res * flat * flat * flat;
+            m = params.slope == 1 ? res : params.slope == 2 ? res * flat : params.slope == 4 ? res / std::sqrt(1.f + r2) : res * flat * flat * flat;
         }
         return 1.f + (m - 1.f) * mix;
     }
@@ -1558,6 +1573,7 @@ private:
         if (params.slope <= 0) return one / Cpx(1.f, r);
         const Cpx res  = one / Cpx(1.f - r * r, r * invQ);
         if (params.slope == 1) return res;
+        if (params.slope == 4) return res / Cpx(1.f, r);     // 18 dB/oct: the resonant 2-pole and one more pole
         const Cpx flat = one / Cpx(1.f - r * r, r * 1.41421356f);
         if (params.slope == 2) return res * flat;
         return res * flat * flat * flat;
@@ -1614,7 +1630,7 @@ private:
             const float paced = std::min(Tn, params.followTight * gapSec);
             Tn += (paced - Tn) * params.follow;
         }
-        Tn = std::clamp(Tn, 0.010f, 6.f);
+        Tn = std::clamp(Tn, 0.010f, 12.f);
         groupMul = Tn / T;
 
         // SPREAD by pitch (the note's real pitch, low E = left .. high E two octaves up = right), by pick

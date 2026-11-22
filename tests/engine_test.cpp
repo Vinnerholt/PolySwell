@@ -1418,6 +1418,26 @@ int main()
         check(rms < 0.002, "muting the string kills the feedback");
     }
 
+    std::printf("Test 36: POG2 swell (measured: 1 - e^(-t/tau), tau = ATTACK / 3, plus the pedal's make-up gain)\n");
+    {
+        const int n = at(3.0), t0 = at(0.2);
+        std::vector<float> x((size_t) n, 0.f);
+        for (int i = t0; i < n; ++i) x[(size_t) i] = 0.2f * (float) std::sin(2 * kPi * 220.0 * i / kSr);
+        Params p; p.attackMs = 500.f; p.swellShape = 2;          // tau 167 ms, like the POG2 at ATTACK 1/2
+        Params m = p; m.levelMatch = true;
+        Params c = p; c.swellShape = 0;
+        const auto o = run(x, p), om = run(x, m), oc = run(x, c);
+        auto lv = [&](const Out& r, double t) { return amp(r.wet, t0 + at(t) + kLatencySamples, at(0.03), 220.0); };
+        const double fin = lv(o, 2.2), at1 = lv(o, 0.167 - 0.015) / fin, classicAt = lv(oc, 0.167 - 0.015) / lv(oc, 2.2);
+        const double gainDb = 20 * std::log10(fin / 0.2), matchDb = 20 * std::log10(lv(om, 2.2) / 0.2);
+        std::printf("  at t = tau: %.2f of the settled level (classic %.2f; POG2 measured 0.63); settled %+.1f dB (POG2 measured +5.9), with MATCH %+.1f dB\n",
+                    at1, classicAt, gainDb, matchDb);
+        check(at1 > 0.5 && at1 < 0.75, "POG2 shape: fast start, about 63 % after one time constant");
+        check(classicAt < 0.25, "the classic shape starts slowly (for comparison)");
+        check(gainDb > 4.5 && gainDb < 7.0, "POG2 make-up gain for a 0.5 s swell (about +6 dB, as measured)");
+        check(std::abs(matchDb) < 1.0, "with MATCH the POG2 gain is left out (MATCH does that job per note)");
+    }
+
     std::printf("%s\n", failures ? "SOME TESTS FAILED" : "ALL TESTS PASSED");
     return failures ? 1 : 0;
 }

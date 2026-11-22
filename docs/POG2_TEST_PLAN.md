@@ -70,3 +70,8 @@ any filter movement during the swell; the detune offset and method.
 
 The results go into PolySwell's `namespace tuning` (ATTACK range and curve, filter slope and Q range), a "POG2"
 swell shape, and a factory preset that matches your G runs, checked by ear against them.
+
+## Results (2026-11-22)
+All runs recorded (A1, B1, B2, B3 redone after DETUNE was found not fully at zero; the first takes are in
+`measurements/pog2/detuned/`). Findings and the model built from them: see CLAUDE.md, "POG2 measurements and model".
+
