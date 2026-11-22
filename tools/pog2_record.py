@@ -24,18 +24,14 @@ SR = 48000
 
 RUNS = [
     ("R0", "Pedal BYPASSED (footswitch LED off). The interface chain itself."),
-    ("A1", "Base: DRY OUTPUT at unity (tape mark), octave sliders down, DRY FX lit, ATTACK down, LP FILTER up, Q off, DETUNE down."),
+    ("A1", "Base: DRY OUTPUT at max (= unity), octave sliders down, DRY FX amber, ATTACK down, LP FILTER up, Q off, DETUNE down."),
     ("A2", "Base, but DRY FX OFF and ATTACK at 1/2."),
     ("B1", "Base, ATTACK at 1/8."), ("B2", "Base, ATTACK at 1/4."), ("B3", "Base, ATTACK at 3/8."),
     ("B4", "Base, ATTACK at 1/2."), ("B5", "Base, ATTACK at 3/4."), ("B6", "Base, ATTACK at the top."),
     ("C1", "Base, LP FILTER at the bottom."), ("C2", "Base, LP FILTER at 1/4."), ("C3", "Base, LP FILTER at 1/2."),
     ("C4", "Base, LP FILTER at 3/4."), ("C5", "Base, LP FILTER at the top."),
-    ("C6", "Base, Q ON, LP FILTER at the bottom."), ("C7", "Base, Q ON, LP FILTER at 1/4."), ("C8", "Base, Q ON, LP FILTER at 1/2."),
-    ("C9", "Base, Q ON, LP FILTER at 3/4."), ("C10", "Base, Q ON, LP FILTER at the top."),
-    ("D1", "Base, ATTACK at 1/2 and LP FILTER at 1/2."), ("D2", "Base, ATTACK 1/2, LP FILTER 1/2, Q ON."),
+    ("D1", "Base, ATTACK at 1/2 and LP FILTER at 1/2."),
     ("E1", "Base, DETUNE at 1/4."), ("E2", "Base, DETUNE at 1/2."), ("E3", "Base, DETUNE at the top."),
-    ("F1", "DRY OUTPUT down, -2 OCTAVES at unity, everything else Base."), ("F2", "DRY OUTPUT down, -1 OCTAVE at unity."),
-    ("F3", "DRY OUTPUT down, +1 OCTAVE at unity."), ("F4", "DRY OUTPUT down, +2 OCTAVES at unity."),
     ("G1", "Your favourite POG2 sound #1."), ("G2", "Your favourite POG2 sound #2."), ("G3", "Your favourite POG2 sound #3."),
 ]
 

@@ -4,9 +4,10 @@ Goal: learn exactly what the POG2's ATTACK, LP FILTER, Q and DETUNE do, so PolyS
 match it (and, later, the octave voices for a companion plugin). Instead of playing guitar into it, a fixed test
 signal is re-amped through the pedal, so every recording has the same input and can be measured to the sample.
 
-Two things below are my understanding of the POG2, not checked: **DRY FX** (lit = ATTACK, filter and detune also
-act on the dry signal) and **Q** (toggles the filter's resonance between two settings). Check both in the manual or by
-ear first; run A1 also confirms DRY FX.
+Scope (owner, 2026-11-22): only the right-hand EFFECTS side is modelled: ATTACK, LP FILTER, DETUNE. Q is skipped
+(PolySwell has its own RES knob) and so are the octave voices. **DRY FX** has four states; as understood (not checked):
+off = no effects on the dry signal, green = ATTACK, red = LP FILTER, **amber = both** (used for every run); run A2
+confirms it.
 
 ## What you need
 - The POG2 on its own 9 V supply, nothing else in the chain.
@@ -19,8 +20,9 @@ ear first; run A1 also confirms DRY FX.
 ## Calibrate once, then touch nothing
 1. Bypass the POG2 (footswitch LED off). Play the file and record it: this is run **R0**, the interface chain itself.
 2. Look at the 1 kHz tone at 0:05 on REC. Set the Hi-Z gain so it peaks around -18 dBFS.
-3. Switch the pedal on: DRY OUTPUT up, all four octave sliders down, DRY FX lit, ATTACK, DETUNE down, LP FILTER up,
-   Q off. Move DRY OUTPUT until the 1 kHz tone is as loud as in bypass. That is **unity**: mark it with tape.
+3. Switch the pedal on: DRY OUTPUT up, all four octave sliders down, DRY FX amber, ATTACK, DETUNE down, LP FILTER up,
+   Q off. Move DRY OUTPUT until the 1 kHz tone is as loud as in bypass. That is **unity**. (Measured: DRY OUTPUT at max
+   is exactly unity, -23.1 dBFS on and bypassed.)
 4. From here on never change the Hi-Z gain, the PLAY level, or DRY OUTPUT.
 
 Record at 48 kHz, 24-bit, no plugins on REC. Start each recording a second before the file and stop after it ends.
@@ -36,15 +38,16 @@ Record at 48 kHz, 24-bit, no plugins on REC. Start each recording a second befor
 | A2 | DRY FX off, ATTACK 1/2 | that ATTACK stops acting on the dry signal (confirms DRY FX) |
 | B1 to B6 | ATTACK at 1/8, 1/4, 3/8, 1/2, 3/4, 1 | attack time per slider position and the shape of the swell |
 | C1 to C5 | LP FILTER at 0, 1/4, 1/2, 3/4, 1 | cutoff per position, slope |
-| C6 to C10 | the same five with Q on | resonance |
 | D1 | ATTACK 1/2, LP FILTER 1/2 | whether the filter moves during the swell (envelope filter or fixed) |
-| D2 | ATTACK 1/2, LP FILTER 1/2, Q on | the same with resonance |
 | E1 to E3 | DETUNE at 1/4, 1/2, 1 | detune amount, and whether it is a chorus or a pitch shift |
-| F1 to F4 | DRY OUTPUT down, one octave slider at unity: -2, -1, +1, +2 | octave tracking speed and chord handling (for later) |
 | G1 to G3 | your three favourite POG2 sounds | a reference to A/B the plugin against by ear |
 
-That is 30 runs of 2 min 43 s each, about 1.5 hours with the changes. B and C matter most. If time is short, do R0,
-A1, B1 to B6, C1 to C10 and D1 first.
+That is 21 runs of 2 min 43 s each (R0 and A1 done 2026-11-22), about an hour with the changes. B and C matter most.
+
+Recorded by `tools/pog2_record.py --out 1` (Line Out 3 mirrors the monitor mix on this Apollo, so the signal goes out
+on Monitor L; keep the Hi-Z input muted in Console's monitor mix or it feeds back). First results: round trip 83.1 ms;
+the POG2 adds ~20 ms with DRY FX on (a held note reaches full level ~32 ms after bypass) and cuts above ~7 kHz even
+with LP FILTER fully up.
 
 For G1 to G3, also record about 30 s of your own playing (a lead line, chords, a swell), DI only, on its own track.
 Then re-amp that DI through the pedal at the same three settings, so I get the same playing dry and through the
