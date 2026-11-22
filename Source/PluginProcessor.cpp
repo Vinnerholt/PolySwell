@@ -13,7 +13,7 @@ namespace
     const std::vector<std::pair<const char*, float>>& defaultSetup()
     {
         static const std::vector<std::pair<const char*, float>> d {
-            { "attack", 500 }, { "sustain", 0 }, { "swellShape", 2 }, { "levelMatch", 0 },
+            { "attack", 500 }, { "sustain", 0 }, { "swellShape", 2 }, { "levelMatch", 1 },
             { "filterOn", 1 }, { "freq", 12000 }, { "slope", 4 }, { "mod", 0 }, { "res", 0 }, { "pickFilter", 0 },
             { "feedbackOn", 1 }, { "feedback", 0 }, { "fbAmp", 1 },
             { "smearOn", 0 }, { "voiceMix", 0 }, { "detuneMix", 0 }, { "detune", 10.1f } };
@@ -36,8 +36,8 @@ namespace
                                            { "fbRise", 1.2f }, { "smearOn", 1 }, { "smearLevel", 0.3f }, { "smearSize", 0.45f }, { "smearSend", 1 } } },
             // the owner's POG2 setting (run G1), fitted by rendering the test file (tools/pog2_compare.py): ATTACK 2 s,
             // 18 dB/oct at 1 kHz, the +-10 cent copies 15..19 dB under the note (MIX 0.39). Held notes ~2 dB, plucks ~4 dB.
-            { "POG2 swell", "Pad", { { "attack", 2000 }, { "vol", 8.5f }, { "freq", 1000 }, { "detune", 10.1f }, { "detuneMix", 0.39f } } },
-            { "Warm pad", "Pad", { { "attack", 1200 }, { "vol", 4.5f }, { "sustain", 0.8f }, { "freq", 1800 }, { "mod", 0.4f }, { "res", 0.15f },
+            { "POG2 swell", "Pad", { { "attack", 2000 }, { "vol", 5.f }, { "freq", 1000 }, { "detune", 10.1f }, { "detuneMix", 0.39f } } },
+            { "Warm pad", "Pad", { { "attack", 1200 }, { "vol", 3.f }, { "sustain", 0.8f }, { "freq", 1800 }, { "mod", 0.4f }, { "res", 0.15f },
                                    { "spread", 0.6f }, { "detuneMix", 0.5f }, { "smearOn", 1 }, { "smearSize", 0.7f }, { "smearLevel", 0.5f }, { "smearSend", 1 } } },
             { "Glass pad", "Pad", { { "attack", 900 }, { "sustain", 0.6f }, { "voiceMix", 0.4f }, { "voiceWave", 5 }, { "voiceOct", 2 }, { "voiceTone", 5000 },
                                     { "voiceUnison", 0.3f }, { "spread", 0.5f }, { "smearOn", 1 }, { "smearSize", 0.65f }, { "smearLevel", 0.45f } } },
@@ -261,7 +261,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout PolySwellProcessor::createLa
     // swell character (VG-8 BOWED spec): shape of the swell, smooth re-picks, EVEN (picks levelled)
     l.add (std::make_unique<juce::AudioParameterChoice> (PID { "swellShape", 1 }, "Swell Shape", juce::StringArray { "Classic", "Bowed", "POG2" }, 2));
     l.add (std::make_unique<juce::AudioParameterBool> (PID { "smoothRepick", 1 }, "Smooth Re-pick", false));
-    l.add (std::make_unique<juce::AudioParameterBool> (PID { "levelMatch", 1 }, "Level-matched Swell", false));
+    l.add (std::make_unique<juce::AudioParameterBool> (PID { "levelMatch", 1 }, "Level-matched Swell", true));   // on by default: closest to the POG2 on plucks
     // FEEDBACK amp model (PolySwell II)
     l.add (std::make_unique<juce::AudioParameterBool> (PID { "fbAmp", 1 }, "Feedback Amp Model", true));
     l.add (std::make_unique<APF> (PID { "fbDistance", 1 }, "Feedback Distance", juce::NormalisableRange<float> (0.f, 1.f, 0.001f), 0.3f));

@@ -224,3 +224,11 @@ rings (outer = lightest). Switch: SKIN chip in the top bar or gear > Skin; saved
   Test 36 checks there is no gain. Presets POG2 swell (+8.5 dB LEVEL) and Warm pad (+4.5) rebalanced (`--peaks`).
 - Fourth skin Sunburst Night (`kNumSkins`): charcoal plate (`plate_night.png`, cream paint -> #221e1a), the Sunburst
   logo with cream lettering (`logo_night.png`), cream ink, Sunburst rings and glow.
+- MATCH on the pedal: a mini bat toggle (`MiniToggle`, lever up = on) right of the ON footswitch, mirroring the LED;
+  right-click = MIDI learn; still in gear > Swell curve too. MATCH is ON by default (param default + `defaultSetup()`):
+  on plucks it is what the POG2's gain did, per note, without the held-note overshoot. `--peaks`: Default = input level;
+  POG2 swell LEVEL +5, Warm pad +3.
+
+## TODO (owner)
+- Pass through all ten presets by ear: after the POG2 gain removal and MATCH-by-default, most ATTACK times (and some
+  LEVELs) probably need adjusting.

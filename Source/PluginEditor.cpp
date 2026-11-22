@@ -2018,6 +2018,44 @@ struct WaveScope : juce::Component, juce::Timer, juce::SettableTooltipClient
     float phase = 0.f, lastU = -1.f, lastW = -1.f, lastT = -1.f, lastO = -1.f;
 };
 
+// a small bat-handle toggle switch, like a pedal's mini switch: lever up = on (MATCH on the pedal)
+struct MiniToggle : juce::Component, juce::SettableTooltipClient
+{
+    MiniToggle (PolySwellProcessor& p, const String& id) : bound (p, id, [this] { repaint(); })
+    { setMouseCursor (juce::MouseCursor::PointingHandCursor); }
+    void paint (Graphics& g) override
+    {
+        const auto b = getLocalBounds().toFloat();
+        const float c = b.getCentreX(), cy = b.getCentreY();
+        const bool on = bound.value > 0.5f;
+        // the hex nut and the dark bushing
+        juce::Path nut;
+        for (int k = 0; k < 6; ++k) { const float a = kPi / 6.f + (float) k * kPi / 3.f, x = c + 9.5f * std::cos (a), y = cy + 9.5f * std::sin (a); if (k == 0) nut.startNewSubPath (x, y); else nut.lineTo (x, y); }
+        nut.closeSubPath();
+        juce::DropShadow (juce::Colours::black.withAlpha (0.5f), 4, { 0, 2 }).drawForPath (g, nut);
+        g.setGradientFill (juce::ColourGradient (Colour (0xffe8e6e0), c - 6.f, cy - 8.f, Colour (0xff6c6a66), c + 6.f, cy + 9.f, false));
+        g.fillPath (nut);
+        g.setColour (juce::Colours::black.withAlpha (0.35f)); g.strokePath (nut, juce::PathStrokeType (0.8f));
+        g.setColour (Colour (0xff1a1816)); g.fillEllipse (c - 4.f, cy - 4.f, 8.f, 8.f);
+        // the lever: a tapered chrome bat, up (on) or down (off), drawn in perspective
+        const float dir = on ? -1.f : 1.f, len = 15.f, tipY = cy + dir * len;
+        juce::Path lever;
+        lever.startNewSubPath (c - 2.6f, cy); lever.lineTo (c - 3.6f, tipY); lever.lineTo (c + 3.6f, tipY); lever.lineTo (c + 2.6f, cy); lever.closeSubPath();
+        g.setGradientFill (juce::ColourGradient (Colour (0xfff7f6f2), c - 3.f, cy, Colour (0xff8a8884), c + 3.f, cy, false));
+        g.fillPath (lever);
+        g.setColour (juce::Colours::black.withAlpha (0.3f)); g.strokePath (lever, juce::PathStrokeType (0.6f));
+        g.setGradientFill (juce::ColourGradient (Colour (0xffffffff), c - 2.f, tipY - 2.f, Colour (0xff9a9894), c + 3.f, tipY + 3.f, true));
+        g.fillEllipse (c - 4.2f, tipY - 4.2f, 8.4f, 8.4f);
+    }
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        if (e.mods.isPopupMenu()) { if (onMenu) onMenu(); return; }
+        bound.set (bound.value > 0.5f ? 0.f : 1.f);
+    }
+    std::function<void()> onMenu;
+    Bound bound;
+};
+
 // a choice of LFO shapes as pictures (sine, triangle, square)
 struct ShapeSeg : juce::Component, juce::SettableTooltipClient
 {
@@ -2339,6 +2377,13 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         onSw.onMenu = [this] { midiMenu ("bypass", onSw); };
         onSw.onDown = [this] { setParam ("bypass", getParam ("bypass") > 0.5f ? 0.f : 1.f); };
         label ("ON", { px + 128 - 20, py + 592, 40, 14 }, 12.f, col::ink, juce::Justification::centred, true, 0.18f);
+        // MATCH: a mini toggle mirroring the LED on the other side of the footswitch
+        matchSw = std::make_unique<MiniToggle> (proc, "levelMatch");
+        matchSw->setTooltip ("MATCH: each note's swell ends as loud as its pick (up = on). Off: the note keeps the string's own fade, so looser playing stays quieter. Right-click: MIDI learn.");
+        matchSw->onMenu = [this] { midiMenu ("levelMatch", *matchSw); };
+        matchSw->setBounds (juce::roundToInt (px + 264 - 16), juce::roundToInt (py + 572 - 20), 32, 40);
+        addAndMakeVisible (*matchSw);
+        label ("MATCH", { px + 264 - 30, py + 592, 60, 14 }, 12.f, col::ink, juce::Justification::centred, true, 0.18f);
     }
 
     // ---- panel
@@ -2928,6 +2973,7 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
     const Skin* currentSkin = nullptr; Chip* abC[2] { nullptr, nullptr }; Chip* bodyC = nullptr;
     Led onLed { proc, "bypass", true, "Lit while the pedal is on." };
     FootSwitch onSw;
+    std::unique_ptr<MiniToggle> matchSw;
     DrawerTab drawer;
     std::vector<std::pair<Rect, Colour>> subBoxes;
     std::unique_ptr<juce::Component> waveScope, waveGrid;
