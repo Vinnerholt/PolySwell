@@ -149,4 +149,11 @@ Model in PolySwell: swell shape POG2 (`swellShape` 2: (1 - e^(-3 ph)) / (1 - e^-
 measured gain unless MATCH is on; test 36), ATTACK up to 8 s, filter slope 18 dB/oct (`slope` 4; RES 0.23 = Q 1),
 DETUNE MIX (`detuneMix`, 0.5 = the old fixed blend), preset "POG2 swell" fitted to the owner's G1 setting: held notes
 within ~2 dB, plucks within ~4 dB (the POG2 holds a pluck a little longer), detune within 3 dB.
+- Defaults since 2026-11-22 (owner): swell shape POG2, filter slope 18 dB/oct (RES 0 = Q 1, the pedal's curve), Init uses
+  both; the gen-1 "Classic" presets keep their own shapes. DETUNE: the knob is now `detuneMix` (how loud the copies
+  are, through `detuneCopyLevel()`, the POG2's measured slider: 0.21 at 3/8, 0.5 at 1/2, only the copies at the top);
+  the cents (`detune`, default 10.1) moved to gear > Fine tuning. ATTACK and TONE use the POG2 sliders' tapers
+  (`taper()` in PluginProcessor.cpp: ATTACK 95 ms at 1/4, 0.5 s at 1/2, 4.4 s at 3/4, 12 s at the top; TONE 247 Hz,
+  830 Hz, 3.5 kHz, 12 kHz). Saved sessions keep their values (the state stores plain values). `ui_snapshot --tapers`
+  prints them.
 

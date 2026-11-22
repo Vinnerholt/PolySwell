@@ -118,7 +118,7 @@ const char* tipFor (const String& id)
         { "vibDepth", "VIBRATO: pitch movement on each note, in cents." },
         { "tremolo", "TREMOLO: each note pulses on its own, starting at its pick." },
         { "spread", "SPREAD: places each note or chord in the stereo field." },
-        { "detune", "DETUNE: a slightly detuned copy, left up and right down." },
+        { "detuneMix", "DETUNE: two copies 10 cents up and down (left and right), as on a POG2. The knob sets how loud they are; at the top only the copies remain." },
         { "voiceMix", "MIX: guitar on the left, synth voice on the right." },
         { "voiceTone", "TONE: the voice's own low-pass filter." },
         { "voiceGlide", "GLIDE: single notes slide from the previous one." },
@@ -1212,7 +1212,11 @@ struct SignalWindow : juce::Component, juce::Timer
         const Plot pl = timeGrid (g, b);
         const float mid = pl.base - pl.h * 0.5f, half = pl.h * 0.5f;
         g.setColour (Colour (0x33ff9a3a)); g.fillRect (pl.x0, mid, pl.w, 1.f);
-        const float d = on ("detuneOn") ? P ("detune") : 0.f, wob = P ("detuneWobble");
+        const float d = P ("detune"), wob = P ("detuneWobble");
+        const float a = on ("detuneOn") ? PolySwellProcessor::detuneCopyLevel (P ("detuneMix")) * juce::jmin (1.f, d / 5.f) : 0.f;
+        // the note itself, fading as the copies take over
+        juce::Path nt; nt.startNewSubPath (pl.x0, mid); nt.lineTo (pl.x0 + pl.w, mid);
+        if (a < 0.995f) glowLine (g, nt, Colour (0xffffb347).withAlpha (0.25f + 0.75f * (1.f - a)));
         juce::Path l, r;
         for (int i = 0; i <= 200; ++i)
         {
@@ -1222,11 +1226,13 @@ struct SignalWindow : juce::Component, juce::Timer
             if (i == 0) { l.startNewSubPath (pl.x (t), yl); r.startNewSubPath (pl.x (t), yr); }
             else { l.lineTo (pl.x (t), yl); r.lineTo (pl.x (t), yr); }
         }
-        glowLine (g, l, Colour (0xfff2c96a)); glowLine (g, r, Colour (0xffd8c3a2));
+        if (a > 0.0005f) { glowLine (g, l, Colour (0xfff2c96a).withAlpha (0.25f + 0.75f * a)); glowLine (g, r, Colour (0xffd8c3a2).withAlpha (0.25f + 0.75f * a)); }
         tag (g, "LEFT +" + String (d, 1) + " C", pl.x0 + 2.f, juce::jmax (pl.base - pl.h + 14.f, mid - d / 25.f * half - 10.f), Colour (0xfff2c96a));
         tag (g, "RIGHT -" + String (d, 1) + " C", pl.x0 + 2.f, juce::jmin (pl.base - 6.f, mid + d / 25.f * half + 10.f), Colour (0xffd8c3a2));
-        if (d < 0.05f) return "off: no detuned copy";
-        return wob > 0.01f ? "a copy up on the left, down on the right, slowly wobbling" : "a copy up on the left, down on the right: width";
+        if (a <= 0.0005f) return "off: just the note";
+        if (a >= 0.995f) return "only the two copies, the note itself gone (a POG2 at the top)";
+        const float db = 20.f * std::log10 (a / (2.f * (1.f - a)));
+        return "copies " + String (d, 1) + " c up and down, " + String (juce::roundToInt (-db)) + " dB under the note" + (wob > 0.01f ? ", wobbling" : "");
     }
 
     // ---------------------------------------------------------------- LAYER
@@ -2006,7 +2012,7 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         {
             const auto r = moduleRect (2);
             const Colour ac = kMods[2].ac;
-            const char* ids[4] = { "vibDepth", "tremolo", "spread", "detune" }; const char* names[4] = { "VIBRATO", "TREMOLO", "SPREAD", "DETUNE" };
+            const char* ids[4] = { "vibDepth", "tremolo", "spread", "detuneMix" }; const char* names[4] = { "VIBRATO", "TREMOLO", "SPREAD", "DETUNE" };
             const float colW = (r.getWidth() - 28.f) / 4.f;
             for (int c = 0; c < 4; ++c)
             {
@@ -2042,7 +2048,7 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
                 }
                 else if (c == 1) stack = { valueChip ("tremRate", "RATE", 0, ac, g), chip (Chip::menu, "tremShape", "", ac, "Tremolo shape.", g) };
                 else if (c == 2) stack = { chip (Chip::menu, "spreadMode", "", ac, "How SPREAD places the notes.", g) };
-                else stack = { valueChip ("detuneMix", "MIX", 0, ac, g), valueChip ("detuneWobble", "WOBBLE", 0, ac, g) };
+                else stack = { valueChip ("detuneWobble", "WOBBLE", 0, ac, g) };
                 float y = r.getY() + 123.f;
                 for (auto* comp : stack) { comp->setTopLeftPosition (juce::roundToInt (cx - (float) comp->getWidth() * 0.5f), juce::roundToInt (y)); y += 25.f; }
             }
@@ -2199,6 +2205,11 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         fine.addSubMenu ("Filter slope", slopeM);
         fine.addSubMenu ("Feedback overtone (when AMP is off)", ovM);
         fine.addSubMenu ("The most SUSTAIN and FEEDBACK may lift a note", maxM);
+        juce::PopupMenu detM;
+        static const float cents[6] = { 5.f, 7.f, 10.1f, 15.f, 20.f, 25.f };
+        for (int i = 0; i < 6; ++i)
+            detM.addItem (360 + i, String (cents[i], cents[i] == 10.1f ? 1 : 0) + " cents" + (i == 2 ? " (POG2)" : ""), true, std::abs (getParam ("detune") - cents[i]) < 0.05f);
+        fine.addSubMenu ("Detune amount", detM);
         m.addSubMenu ("Fine tuning", fine);
         m.addSectionHeader ("Window");
         const float sizes[] = { 0.75f, 1.f, 1.25f, 1.5f, 2.f };
@@ -2209,7 +2220,8 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&gearB), [this, sizes] (int r)
         {
             auto flip = [this] (const char* id) { setParam (id, getParam (id) > 0.5f ? 0.f : 1.f); };
-            if (r >= 340 && r < 345) setParam ("sustainMax", (float) maxes[r - 340]);
+            if (r >= 360 && r < 366) setParam ("detune", cents[r - 360]);
+            else if (r >= 340 && r < 345) setParam ("sustainMax", (float) maxes[r - 340]);
             else if (r >= 320 && r < 330) setParam ("fbHarmonic", (float) (r - 320));
             else if (r >= 300 && r < 310) setParam ("slope", (float) (r - 300));
             else if (r >= 200) { if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (proc.getParameters()[r - 200])) proc.forgetCc (rp->getParameterID()); }
@@ -2250,7 +2262,7 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         int act = 0;
         if (getParam ("filterOn") > 0.5f) act |= 1;
         if (getParam ("feedback") > 0.f && getParam ("feedbackOn") > 0.5f) act |= 2;
-        if (getParam ("motionOn") > 0.5f && (getParam ("vibDepth") > 0.f || getParam ("tremolo") > 0.f || getParam ("spread") > 0.f || getParam ("detune") > 0.f)) act |= 4;
+        if (getParam ("motionOn") > 0.5f && (getParam ("vibDepth") > 0.f || getParam ("tremolo") > 0.f || getParam ("spread") > 0.f || getParam ("detuneMix") > 0.f)) act |= 4;
         if (getParam ("voiceOn") > 0.5f && getParam ("voiceMix") > 0.f) act |= 8;
         if (getParam ("holdOn") > 0.5f) act |= 16;
         if (getParam ("smearOn") > 0.5f) act |= 32;

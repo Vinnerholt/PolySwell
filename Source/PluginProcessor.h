@@ -96,6 +96,9 @@ public:
     bool uiPedalsOpen = true;
     std::atomic<bool> editorOpen { false };  // the window wants the played notes tracked
     static juce::String programTag (int index);   // "Lead" / "Pad" / "Feedback" / "Classic"
+    // DETUNE knob -> how loud the +-10 cent copies are, as the POG2's slider (measured: -18 dB at 3/8, -6 dB at 1/2,
+    // only the copies at the top). 0.5 = each copy half, the original half (per side)
+    static float detuneCopyLevel (float knob);
 
     // MIDI learn: a CC moves a parameter (footswitch -> HOLD / ON, expression pedal -> ATTACK ...). Message thread API:
     void learnCc (const juce::String& paramId);            // the next CC that arrives is bound to this parameter

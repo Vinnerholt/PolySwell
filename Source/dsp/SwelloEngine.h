@@ -418,7 +418,7 @@ public:
         allMidiOff(); trackerDue = false; freshAnalysis = false; fastAnalyses = 0;
         gvL.fill(0.f); gvR.fill(0.f); gvW = 0; sampleCount = 0; evtPending = evtActive = -1; gvAmt = 0.f; gvPhase = 0.f;
         pos = 0; hopCount = 0;
-        mix = 0.f; qSm = resToQ(params.resLow);
+        mix = 0.f; qSm = resToQ(params.resLow, params.slope);
         freqSm = params.freqHz; modSm = params.mod;
         frameCount = 0; lastQualFrame = 0; eventStartFrame = 0; eventId = 0; haveEvent = false; groupOpen = false;
         refEventDb = -30.f; haveRef = false; groupMul = 1.f; groupPeakE = 0.f; groupLevelDb = -120.f; gapSec = 1e9f;
@@ -650,9 +650,12 @@ private:
         return table[(size_t) i] + (table[(size_t) i + 1] - table[(size_t) i]) * f;
     }
 
-    static float resToQ(float r)
+    // RES 0 = the gentlest curve; at 18 dB/oct (the POG2's) RES 0 is Q 1, which with the extra pole makes the measured
+    // third-order Butterworth, so RES only ever adds a peak on top of the pedal's own curve
+    static float resToQ(float r, int slope)
     {
-        return tuning::resMinQ * std::pow(tuning::resMaxQ / tuning::resMinQ, std::clamp(r, 0.f, 1.f));
+        const float q0 = slope == 4 ? 1.f : tuning::resMinQ;
+        return q0 * std::pow(tuning::resMaxQ / q0, std::clamp(r, 0.f, 1.f));
     }
 
     static float wrapPi(float a)
@@ -700,7 +703,7 @@ private:
 
         // frame-rate smoothing of the filter controls
         mix   += ((params.filterMode > 0 ? 1.f : 0.f) - mix) * mixCoef;
-        qSm   += (resToQ(params.filterMode == 1 ? params.resLow : params.resHigh) - qSm) * qCoef;
+        qSm   += (resToQ(params.filterMode == 1 ? params.resLow : params.resHigh, params.slope) - qSm) * qCoef;
         freqSm += (params.freqHz - freqSm) * ctlCoef;
         modSm  += (params.mod    - modSm)  * ctlCoef;
 

@@ -255,6 +255,20 @@ int main (int argc, char** argv)
     if (argc > 1 && juce::String (argv[1]) == "--levels") { runLevels(); return 0; }
     if (argc > 1 && juce::String (argv[1]) == "--peaks") { runPeaks(); return 0; }
     if (argc > 1 && juce::String (argv[1]) == "--render") return runRender (argc, argv);
+    if (argc > 1 && juce::String (argv[1]) == "--tapers")   // knob position -> value, to check the POG2 tapers
+    {
+        auto pp = std::make_unique<PolySwellProcessor>();
+        for (auto* id : { "attack", "freq", "detuneMix" })
+        {
+            auto* prm = pp->apvts.getParameter (id);
+            std::printf ("%-10s", id);
+            for (float pos : { 0.f, 0.125f, 0.25f, 0.375f, 0.5f, 0.625f, 0.75f, 0.875f, 1.f })
+                std::printf ("  %.3f:%s", pos, prm->getText (pos, 12).toRawUTF8());
+            std::printf ("   default %s\n", prm->getText (prm->getDefaultValue(), 12).toRawUTF8());
+        }
+        for (float k : { 0.f, 0.25f, 0.375f, 0.5f, 0.75f, 1.f }) std::printf ("  detune knob %.3f -> copies %.2f\n", k, PolySwellProcessor::detuneCopyLevel (k));
+        return 0;
+    }
     if (argc > 2 && juce::String (argv[2]) == "--fonts")
     {
         for (auto& st : juce::Font::findAllTypefaceStyles ("Bahnschrift")) std::printf ("style: %s\n", st.toRawUTF8());
