@@ -20,15 +20,15 @@ jobs:
         include:
           - os: windows-latest
             name: Windows
-          - os: macos-14
+          - os: macos-latest
             name: macOS
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Configure (Windows)
         if: runner.os == 'Windows'
-        run: cmake -B build -G "Visual Studio 17 2022" -A x64
+        run: cmake -B build -A x64   # the image's default Visual Studio
 
       - name: Configure (macOS, universal arm64 + x86_64)
         if: runner.os == 'macOS'
