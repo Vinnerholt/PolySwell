@@ -1,0 +1,19 @@
+PolySwell II - installing on a Mac
+==================================
+
+Easiest: double-click "install-mac.command".
+If macOS says it cannot be opened: right-click it > Open > Open. On macOS 15 (Sequoia) and newer:
+click Done, then System Settings > Privacy & Security, scroll down and click "Open Anyway".
+It copies the plugins to your user plug-in folders and clears the "downloaded from the internet" flag.
+
+By hand instead:
+1. Close your DAW.
+2. Copy "PolySwell II.vst3"       to  ~/Library/Audio/Plug-Ins/VST3/
+   Copy "PolySwell II.component"  to  ~/Library/Audio/Plug-Ins/Components/   (Logic, GarageBand)
+   (In Finder: Go > Go to Folder... and paste the path.)
+3. PolySwell II is free and not signed with a paid Apple developer account, so macOS blocks it at first.
+   Open Terminal and paste:
+       xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/PolySwell\ II.vst3 ~/Library/Audio/Plug-Ins/Components/PolySwell\ II.component
+4. Open your DAW and rescan plugins. Logic: restart it; it validates the Audio Unit on start.
+
+Runs on Apple Silicon and Intel Macs (macOS 10.13 or newer).

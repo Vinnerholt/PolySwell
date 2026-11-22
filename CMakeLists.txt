@@ -11,11 +11,19 @@ FetchContent_Declare(JUCE
     GIT_SHALLOW ON)
 FetchContent_MakeAvailable(JUCE)
 
+# VST3 everywhere, Audio Unit too on a Mac (Logic, GarageBand). Universal binary on a Mac:
+#   cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+set(POLYSWELL_FORMATS VST3)
+if (APPLE)
+    list(APPEND POLYSWELL_FORMATS AU)
+endif()
+
 juce_add_plugin(PolySwell
-    COMPANY_NAME "YourName"
-    PLUGIN_MANUFACTURER_CODE Ynam
+    COMPANY_NAME "Benno"
+    BUNDLE_ID com.benno.polyswell2
+    PLUGIN_MANUFACTURER_CODE Ynam   # keep: with PLUGIN_CODE it is the plugin's identity in saved DAW sessions
     PLUGIN_CODE Psw2
-    FORMATS VST3
+    FORMATS ${POLYSWELL_FORMATS}
     PRODUCT_NAME "PolySwell II"
     VST3_CATEGORIES Fx
     IS_SYNTH FALSE
@@ -55,6 +63,8 @@ target_include_directories(engine_test PRIVATE Source)
 # the tests keep many engines (each a few hundred KB with the pitch tracker) on the stack
 if (MSVC)
     target_link_options(engine_test PRIVATE /STACK:16777216)
+elseif (APPLE)
+    target_link_options(engine_test PRIVATE -Wl,-stack_size,0x1000000)
 endif()
 
 # Dev tool: render the editor to PNGs without a DAW (not part of the plugin)

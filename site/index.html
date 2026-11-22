@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PolySwell II</title>
+<meta name="description" content="A free polyphonic swell and sustain pedal plugin for guitar. VST3 for Windows and macOS, Audio Unit for macOS.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Fraunces:ital,opsz,wght@1,9..144,700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f1e7d0; --paper: #fbf5e6; --ink: #2a231b; --ink2: #6b5d4b; --line: rgba(42,35,27,.18);
+    --r1: #e09a45; --r2: #d9732f; --r3: #bc4320; --accent: #d9732f; --onAccent: #fff4df;
+  }
+  body[data-skin="lagoon"]   { --r1: #4fc3b5; --r2: #3b86c9; --r3: #6a3aa0; --accent: #3b86c9; --onAccent: #f2f6ff; }
+  body[data-skin="midnight"] { --bg: #1b1d2c; --paper: #23263a; --ink: #efe5cb; --ink2: #b3aa95; --line: rgba(239,229,203,.18);
+                               --r1: #5ed6c5; --r2: #4c8fe0; --r3: #9248c2; --accent: #4c8fe0; --onAccent: #f2f6ff; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 500 18px/1.55 "Barlow Semi Condensed", system-ui, sans-serif;
+         transition: background .4s, color .4s; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
+  header { padding: 56px 0 24px; text-align: center; }
+  .rings { height: 10px; max-width: 360px; margin: 0 auto 26px; border-radius: 99px;
+           background: linear-gradient(90deg, var(--r1) 0 33%, var(--r2) 33% 66%, var(--r3) 66%); }
+  h1 { font: italic 700 clamp(48px, 9vw, 88px)/1 "Fraunces", Georgia, serif; margin: 0; letter-spacing: -.02em; }
+  h1 span { color: var(--accent); }
+  .tag { font-size: 21px; color: var(--ink2); max-width: 640px; margin: 16px auto 0; }
+  .dl { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin: 32px 0 10px; }
+  .btn { display: inline-flex; flex-direction: column; align-items: center; min-width: 230px; padding: 14px 22px;
+         border-radius: 99px; text-decoration: none; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+         background: var(--accent); color: var(--onAccent); transition: transform .15s; }
+  .btn small { font-weight: 500; letter-spacing: .02em; text-transform: none; opacity: .85; }
+  .btn.alt { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 2px var(--ink); }
+  .btn:hover { transform: translateY(-2px); }
+  .meta { text-align: center; color: var(--ink2); font-size: 15px; }
+  .meta a { color: inherit; }
+  .shot { margin: 36px auto 10px; }
+  .shot img { width: 100%; height: auto; display: block; border-radius: 14px; box-shadow: 0 24px 60px rgba(0,0,0,.35); }
+  .skins { display: flex; justify-content: center; gap: 8px; margin: 18px 0 0; }
+  .skins button { font: 700 14px "Barlow Semi Condensed", sans-serif; letter-spacing: .14em; text-transform: uppercase;
+                  padding: 6px 16px; border-radius: 99px; border: 1.5px solid var(--ink); background: none; color: var(--ink); cursor: pointer; }
+  .skins button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--onAccent); }
+  section { padding: 44px 0 8px; }
+  h2 { font: 700 15px "Barlow Semi Condensed", sans-serif; letter-spacing: .22em; text-transform: uppercase; margin: 0 0 18px; }
+  h2::before { content: ""; display: inline-block; width: 22px; height: 6px; border-radius: 9px; background: var(--accent);
+               margin-right: 10px; vertical-align: middle; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+  .card { background: var(--paper); border: 1px solid var(--line); border-radius: 18px; padding: 20px 22px; }
+  .card h3 { margin: 0 0 6px; font-size: 19px; letter-spacing: .04em; }
+  .card p { margin: 0; color: var(--ink2); font-size: 16.5px; }
+  ol { margin: 0; padding-left: 22px; } li { margin: 4px 0; }
+  code { font: 14px ui-monospace, Menlo, Consolas, monospace; background: rgba(0,0,0,.07); padding: 2px 6px; border-radius: 6px;
+         overflow-wrap: anywhere; }
+  pre { background: #1c1712; color: #f3e6cc; padding: 14px 16px; border-radius: 12px; overflow-x: auto; font-size: 14px; }
+  pre code { background: none; padding: 0; color: inherit; }
+  footer { padding: 48px 0 56px; text-align: center; color: var(--ink2); font-size: 15px; }
+  footer a { color: inherit; }
+  @media (max-width: 560px) { body { font-size: 17px; } .btn { min-width: 100%; } }
+</style>
+</head>
+<body data-skin="sunburst">
+<div class="wrap">
+  <header>
+    <div class="rings" aria-hidden="true"></div>
+    <h1>Poly<span>Swell</span> II</h1>
+    <p class="tag">A free polyphonic swell and sustain pedal for guitar. Every note swells in on its own and rings as long as you like,
+      for smooth leads, ambient pads and amp-in-the-room feedback.</p>
+    <div class="dl">
+      <a class="btn js-dl" data-file="PolySwell-II-Windows.zip" href="#">Windows<small>VST3 · Windows 10/11</small></a>
+      <a class="btn js-dl" data-file="PolySwell-II-macOS.zip" href="#">macOS<small>VST3 + AU · Apple Silicon &amp; Intel</small></a>
+    </div>
+    <p class="meta"><span class="js-ver">Latest release</span> · <a class="js-repo" href="#">Source code on GitHub</a> · free and open source (AGPLv3)</p>
+  </header>
+
+  <div class="shot">
+    <img id="shot" src="img/sunburst.png" width="1076" height="720" alt="PolySwell II: the pedal with its signal window, and the effects panel">
+  </div>
+  <div class="skins" role="group" aria-label="Skin">
+    <button data-skin="sunburst" aria-pressed="true">Sunburst</button>
+    <button data-skin="lagoon" aria-pressed="false">Lagoon</button>
+    <button data-skin="midnight" aria-pressed="false">Midnight</button>
+  </div>
+
+  <section>
+    <h2>What it does</h2>
+    <div class="grid">
+      <div class="card"><h3>Swell per note</h3><p>ATTACK, SUSTAIN and TONE act on each note on its own. The swell follows a measured hardware POG2, and MATCH brings swells up to your pick level.</p></div>
+      <div class="card"><h3>Follows your playing</h3><p>FEEL, PACE and EVEN shape the swell from how hard and how fast you play.</p></div>
+      <div class="card"><h3>HOLD</h3><p>A footswitch that freezes what's ringing into a pad you can keep playing over.</p></div>
+      <div class="card"><h3>Note-aware effects</h3><p>Filter sweeps, amp-in-the-room feedback, vibrato and detune, a synth layer under each note, and a space that follows the swell.</p></div>
+      <div class="card"><h3>See what you hear</h3><p>A live window draws every note you play, and shows a picture of what each knob does while you turn it.</p></div>
+      <div class="card"><h3>Made to play</h3><p>Presets for Lead, Pad and Feedback, undo/redo, A/B compare, MIDI learn for footswitches and expression pedals, and three skins.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Install</h2>
+    <div class="grid">
+      <div class="card"><h3>Windows</h3>
+        <ol><li>Unzip <code>PolySwell-II-Windows.zip</code>.</li>
+            <li>Copy <code>PolySwell II.vst3</code> to <code>C:\Program Files\Common Files\VST3</code>.</li>
+            <li>Rescan plugins in your DAW.</li></ol></div>
+      <div class="card"><h3>macOS</h3>
+        <ol><li>Unzip <code>PolySwell-II-macOS.zip</code>.</li>
+            <li>Double-click <code>install-mac.command</code>. If macOS blocks it, right-click it and choose Open. On macOS 15 and newer, go to System Settings › Privacy &amp; Security › Open Anyway.</li>
+            <li>Rescan plugins (in Logic, restart it).</li></ol></div>
+    </div>
+    <p class="meta" style="text-align:left;margin-top:14px">PolySwell II isn't notarised by Apple (that costs a paid developer account), which is why macOS asks.
+      The installer clears the flag for you. By hand, it's this in Terminal:</p>
+    <pre><code>xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/PolySwell\ II.vst3 ~/Library/Audio/Plug-Ins/Components/PolySwell\ II.component</code></pre>
+  </section>
+
+  <section>
+    <h2>Build it yourself</h2>
+    <p>You need CMake 3.22+ and Visual Studio 2022 (Windows) or Xcode (macOS). JUCE downloads by itself.</p>
+    <pre><code>cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release --target PolySwell_VST3</code></pre>
+    <p class="meta" style="text-align:left">On a Mac, also build <code>PolySwell_AU</code>. Details are in the README.</p>
+  </section>
+
+  <footer>
+    PolySwell II by Benno · <a class="js-repo" href="#">GitHub</a> · built with JUCE · VST is a trademark of Steinberg Media Technologies GmbH
+  </footer>
+</div>
+<script>
+  // owner.github.io/repo -> github.com/owner/repo, so the page needs no editing after a rename or fork
+  (function () {
+    var owner = location.hostname.split(".")[0], repo = location.pathname.split("/").filter(Boolean)[0] || "";
+    var onPages = /\.github\.io$/.test(location.hostname) && repo;
+    var base = onPages ? "https://github.com/" + owner + "/" + repo : "";
+    document.querySelectorAll(".js-repo").forEach(function (a) { a.href = base || "#"; });
+    document.querySelectorAll(".js-dl").forEach(function (a) {
+      a.href = base ? base + "/releases/latest/download/" + a.dataset.file : "#";
+    });
+    if (base) {
+      fetch("https://api.github.com/repos/" + owner + "/" + repo + "/releases/latest")
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (j) { if (j && j.tag_name) document.querySelector(".js-ver").textContent = "Version " + j.tag_name.replace(/^v/, ""); })
+        .catch(function () {});
+    }
+    var img = document.getElementById("shot");
+    document.querySelectorAll(".skins button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        document.body.dataset.skin = b.dataset.skin;
+        img.src = "img/" + b.dataset.skin + ".png";
+        document.querySelectorAll(".skins button").forEach(function (o) { o.setAttribute("aria-pressed", o === b ? "true" : "false"); });
+      });
+    });
+  })();
+</script>
+</body>
+</html>

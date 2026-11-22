@@ -1,0 +1,11 @@
+PolySwell II - installing on Windows
+====================================
+
+1. Close your DAW.
+2. Copy the folder "PolySwell II.vst3" into
+       C:\Program Files\Common Files\VST3
+   (Windows asks for administrator permission; that is normal.)
+3. Open your DAW and rescan plugins if it does not find it by itself.
+   It shows up as "PolySwell II" by Benno (an effect, VST3).
+
+Presets you save go to Documents\PolySwell\Presets.

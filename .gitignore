@@ -7,3 +7,5 @@ shots/
 measurements/*.wav
 measurements/pog2/
 measurements/render/
+
+--render/

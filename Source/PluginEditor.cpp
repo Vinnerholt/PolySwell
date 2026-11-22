@@ -20,12 +20,21 @@ namespace col
                  hold { 0xffb596dc }, space { 0xffa3c27c };
 }
 
+// Bahnschrift / Consolas ship with Windows; a Mac gets its closest built-in fonts (DIN Alternate, Menlo)
+#if JUCE_MAC
+static const char* const kUiFace = "DIN Alternate";
+static const char* const kMonoFace = "Menlo";
+#else
+static const char* const kUiFace = "Bahnschrift";
+static const char* const kMonoFace = "Consolas";
+#endif
+
 juce::Font uiFont (float h, bool bold = true, float track = 0.12f)
 {
-    return juce::Font (juce::FontOptions ("Bahnschrift", h, bold ? juce::Font::bold : juce::Font::plain))
+    return juce::Font (juce::FontOptions (kUiFace, h, bold ? juce::Font::bold : juce::Font::plain))
              .withHorizontalScale (0.88f).withExtraKerningFactor (track);
 }
-juce::Font monoFont (float h) { return juce::Font (juce::FontOptions ("Consolas", h, juce::Font::plain)); }
+juce::Font monoFont (float h) { return juce::Font (juce::FontOptions (kMonoFace, h, juce::Font::plain)); }
 
 // ------------------------------------------------------------------------------------------------ skins
 // The pedal is printed on a worn plate (the owner's artwork, resources/skin), with the PolySwell logo; a skin sets the
