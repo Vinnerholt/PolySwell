@@ -200,3 +200,12 @@ rings (outer = lightest). Switch: SKIN chip in the top bar or gear > Skin; saved
   + PACE or FEEL when they changed it. Nothing played: an average pick's swell dashed. TONE (right): the filter response
   on the latest note now (RES peak, slope, MOD sweep position with its two ends dashed, DYN shift by the pick), "OPEN"
   when off. Input meter moved beside the NOTES switch. FootSwitch photo needed `setOpacity (1.f)` too.
+- Round 5 UI: a pick's dot stops when its note stops (no tracked note whose time since pick matches: `Pick::endAge`);
+  LEVEL takes the whole glass with the filter off; caption beside the NOTES switch; input meter = thin bar on the left
+  edge. Window 309 x 167: the plates' printed glass was stretched 38 image rows (rows 160..198 repeated, cream rows
+  620..658 removed), pedal rows below it moved down 24, logo 282 wide.
+- Panel rows 150 / 232 / 216: FILTER | FEEDBACK short (settings at y+120); MOTION = four boxed columns, each setting
+  named above its chip (`named`); SPACE = three knobs + IN box (SEND, THRESHOLD, DARK) | GATE box (ON, HOLD, CUT);
+  LAYER: knobs, OCTAVE / PLAY (MONO) / UNISON fader (Knob kind 4, `Look::drawLinearSlider`); WAVE box = `WaveScope`
+  (the wave after TONE and OCTAVE, UNISON copies drifting, animates only while UNISON > 0) over `WaveGrid` (nine
+  buttons with wave pictures; `waveHarm` recipes are pictures, not the synth).
