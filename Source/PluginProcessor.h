@@ -83,7 +83,7 @@ public:
     static juce::Array<juce::File> userPresets();
     bool saveUserPreset (const juce::String& name);
     bool loadUserPreset (const juce::File& file);
-    juce::String currentPresetName { "Init" };
+    juce::String currentPresetName { "Default" };
     bool userPresetLoaded = false;
 
     // your own body IR (BODY > Load IR...), remembered with the session

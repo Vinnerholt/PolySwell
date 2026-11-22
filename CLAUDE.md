@@ -209,3 +209,12 @@ rings (outer = lightest). Switch: SKIN chip in the top bar or gear > Skin; saved
   LAYER: knobs, OCTAVE / PLAY (MONO) / UNISON fader (Knob kind 4, `Look::drawLinearSlider`); WAVE box = `WaveScope`
   (the wave after TONE and OCTAVE, UNISON copies drifting, animates only while UNISON > 0) over `WaveGrid` (nine
   buttons with wave pictures; `waveHarm` recipes are pictures, not the synth).
+- Presets (owner, 2026-11-22): the 18 gen-1 "Classic" presets are gone. Ten PolySwell II presets (`newPresets()`), each =
+  every parameter at its default (setup params kept) + `defaultSetup()` (ATTACK 500 ms, POG2 curve, filter on, open at
+  12 kHz, 18 dB/oct, so TONE works) + its own list: Default, Default dynamic (tag Default), Singing lead, Violin lead,
+  Slow bloom lead (Lead), POG2 swell, Warm pad, Glass pad (Pad), Amp in the room, Slow howl (Feedback). A new instance
+  starts as Default. `--peaks`: all under -6 dBFS.
+- BODY is part of FILTER: off with it (processor), one choice in its menu (Off / VG-8 tone / a violin IR / yours), MIX
+  faded unless an IR is chosen. Window caption says FEEL+PACE when both changed a pick's attack; the hardest pick peaks
+  at 95 % (was clipped). MOTION = 2 x 2 boxes (VIBRATO | TREMOLO with settings beside, SPREAD | DETUNE), tremolo SHAPE
+  as pictures (`ShapeSeg`). Midnight plate regenerated from Sunburst (only warm cream paint -> navy; rim and worn frame kept).

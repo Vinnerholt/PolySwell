@@ -7,101 +7,45 @@ using PID = juce::ParameterID;
 
 namespace
 {
-    struct Preset
-    {
-        const char* name;
-        float vol, attack, freq, mod; int filter; float resLow, resHigh; int slope;
-        float sustain, detune, dry, touch, follow, feedback, tremolo, tremRate, spread;
-    };
-
-    // Starting points only: tune them by ear against the real pedal.
-    const Preset kPresets[] =
-    {
-        //                    vol  attack  freq    mod  flt resLow resHigh slope sust detune dry  touch follow fdbk trem rate spread
-        { "Init",            0.f,  300.f, 2000.f,  0.0f, 0, 0.0f,  0.65f, 1, 0.0f,  0.f, 0.0f,  0.0f, 0.0f, 0.0f, 0.0f, 5.f, 0.0f },
-        { "Violin swell",    0.f,  600.f, 2000.f,  0.0f, 0, 0.0f,  0.65f, 1, 0.4f,  8.f, 0.0f,  0.4f, 0.3f, 0.0f, 0.0f, 5.f, 0.0f },
-        { "Slow gear",       0.f, 1500.f, 2000.f,  0.0f, 0, 0.0f,  0.65f, 1, 0.0f,  0.f, 0.0f,  0.0f, 0.0f, 0.0f, 0.0f, 5.f, 0.0f },
-        { "Wah bloom",       0.f,  400.f, 2500.f,  0.8f, 1, 0.45f, 0.65f, 1, 0.0f,  0.f, 0.0f,  0.5f, 0.5f, 0.0f, 0.0f, 5.f, 0.0f },
-        { "Pad",             0.f, 1200.f, 1800.f,  0.5f, 1, 0.20f, 0.65f, 2, 0.6f, 14.f, 0.0f,  0.0f, 0.0f, 0.3f, 0.0f, 5.f, 0.5f },
-        { "Closing door",    0.f,  900.f, 3500.f, -0.7f, 2, 0.0f,  0.55f, 1, 0.3f,  6.f, 0.0f,  0.0f, 0.0f, 0.0f, 0.0f, 5.f, 0.0f },
-        { "Pick attack",     0.f,  500.f, 2000.f,  0.0f, 0, 0.0f,  0.65f, 1, 0.0f,  0.f, 0.35f, 0.0f, 0.6f, 0.0f, 0.0f, 5.f, 0.0f },
-        { "Amp feedback",    0.f,  250.f, 2000.f,  0.0f, 0, 0.0f,  0.65f, 1, 0.3f,  0.f, 0.25f, 0.3f, 0.0f, 0.8f, 0.0f, 5.f, 0.0f },
-        { "Pulse spread",    0.f,  200.f, 2000.f,  0.0f, 0, 0.0f,  0.65f, 1, 0.4f,  0.f, 0.0f,  0.0f, 0.4f, 0.0f, 0.6f, 4.f, 0.8f },
-        { "VG pad",          0.f,  700.f, 2000.f,  0.0f, 0, 0.0f,  0.65f, 1, 0.5f,  0.f, 0.0f,  0.0f, 0.0f, 0.0f, 0.0f, 5.f, 0.4f },
-        { "80s brass",       0.f,   60.f, 2000.f,  0.0f, 0, 0.0f,  0.65f, 1, 0.2f,  0.f, 0.0f,  0.4f, 0.3f, 0.0f, 0.0f, 5.f, 0.0f },
-        { "Supersaw pad",    0.f, 1200.f, 2000.f,  0.0f, 0, 0.0f,  0.65f, 1, 0.6f,  0.f, 0.0f,  0.0f, 0.0f, 0.0f, 0.0f, 5.f, 0.6f },
-        { "Violin",          0.f,  280.f, 3200.f,  0.0f, 1, 0.15f, 0.65f, 1, 0.45f, 0.f, 0.0f,  0.4f, 0.4f, 0.0f, 0.0f, 5.f, 0.0f },
-        { "Warble",          0.f,  350.f, 2000.f,  0.0f, 0, 0.0f,  0.65f, 1, 0.3f,  6.f, 0.0f,  0.0f, 0.3f, 0.0f, 0.0f, 5.f, 0.3f },
-        { "Dynamic wah",     0.f,  250.f, 1200.f,  0.6f, 1, 0.45f, 0.65f, 1, 0.0f,  0.f, 0.0f,  0.3f, 0.4f, 0.0f, 0.0f, 5.f, 0.0f },
-        { "Glass pad",       0.f, 1500.f, 2000.f,  0.0f, 0, 0.0f,  0.65f, 1, 0.6f,  0.f, 0.0f,  0.0f, 0.0f, 0.0f, 0.0f, 5.f, 0.5f },
-        // Roland VG-8 BOWED (spec v2, measured from Voyager's V-8 bow mode): ~0.5 s S-curve swell, a gentle 6 dB/oct
-        // tone that opens from darker over the attack, no resonance, no pick-strength response, subtle 4.5 Hz vibrato
-        // and amplitude wobble, slight width. More bowed-mode extras (swell shape, smooth re-pick) set below.
-        { "Bowed (VG-8)",    0.f,  500.f, 9000.f,  0.15f, 1, 0.0f, 0.65f, 0, 0.0f,  3.f, 0.0f,  0.0f, 0.0f, 0.0f, 0.2f, 4.5f, 0.0f },
-        // a violin: the bowed swell + a real violin body (IR) + delayed vibrato + a touch of tape
-        { "Violin body",     0.f,  450.f, 9000.f,  0.15f, 1, 0.0f, 0.65f, 0, 0.25f, 0.f, 0.0f,  0.2f, 0.3f, 0.0f, 0.0f, 5.f, 0.0f },
-    };
-    constexpr int kNumPresets = (int) (sizeof (kPresets) / sizeof (kPresets[0]));
-
-    // PolySwell II presets for its three uses. Each starts from Init and sets only what is listed.
+    // PolySwell II presets. Every preset starts from Default (all parameters at their defaults, the main pedal only:
+    // the POG2 swell, the filter open at 18 dB/oct so TONE works) and sets only what it lists.
     struct NewPreset { const char* name; const char* tag; std::vector<std::pair<const char*, float>> set; };
+    const std::vector<std::pair<const char*, float>>& defaultSetup()
+    {
+        static const std::vector<std::pair<const char*, float>> d {
+            { "attack", 500 }, { "sustain", 0 }, { "swellShape", 2 }, { "levelMatch", 0 },
+            { "filterOn", 1 }, { "freq", 12000 }, { "slope", 4 }, { "mod", 0 }, { "res", 0 }, { "pickFilter", 0 },
+            { "feedbackOn", 1 }, { "feedback", 0 }, { "fbAmp", 1 },
+            { "smearOn", 0 }, { "voiceMix", 0 }, { "detuneMix", 0 }, { "detune", 10.1f } };
+        return d;
+    }
     const std::vector<NewPreset>& newPresets()
     {
         static const std::vector<NewPreset> p {
-            { "Singing lead", "Lead", { { "attack", 180 }, { "sustain", 0.6f }, { "smoothRepick", 1 }, { "touch", 0.3f }, { "follow", 0.4f },
-                                        { "feedback", 0.3f }, { "fbDistance", 0.3f }, { "fbRise", 1.6f }, { "vibDepth", 10 }, { "vibDelay", 0.35f }, { "vibTarget", 2 }, { "vibHuman", 1 } } },
+            { "Default", "Default", {} },
+            { "Default dynamic", "Default", { { "attack", 400 }, { "sustain", 0.35f }, { "touch", 0.35f }, { "follow", 0.45f }, { "even", 0.25f },
+                                               { "freq", 3500 }, { "mod", 0.2f }, { "res", 0.15f }, { "pickFilter", 0.35f },
+                                               { "feedback", 0.25f }, { "fbDistance", 0.3f }, { "fbRise", 1.4f } } },
+            { "Singing lead", "Lead", { { "attack", 180 }, { "sustain", 0.6f }, { "smoothRepick", 1 }, { "touch", 0.3f }, { "follow", 0.4f }, { "freq", 5000 },
+                                        { "feedback", 0.3f }, { "fbDistance", 0.3f }, { "fbRise", 1.6f },
+                                        { "vibDepth", 10 }, { "vibDelay", 0.35f }, { "vibTarget", 2 }, { "vibHuman", 1 } } },
             { "Violin lead", "Lead", { { "attack", 350 }, { "smoothRepick", 1 }, { "even", 0.4f }, { "sustain", 0.4f },
-                                       { "filterOn", 1 }, { "freq", 6000 }, { "mod", 0.15f }, { "slope", 0 }, { "bowedBody", 1 },
+                                       { "freq", 6000 }, { "mod", 0.15f }, { "slope", 0 }, { "bowedBody", 1 },
                                        { "vibDepth", 14 }, { "vibDelay", 0.35f }, { "vibRate", 5 }, { "vibTarget", 2 }, { "vibHuman", 1 } } },
             { "Slow bloom lead", "Lead", { { "attack", 600 }, { "sustain", 0.7f }, { "follow", 0.5f }, { "feedback", 0.5f }, { "fbDistance", 0.28f },
                                            { "fbRise", 1.2f }, { "smearOn", 1 }, { "smearLevel", 0.3f }, { "smearSize", 0.45f }, { "smearSend", 1 } } },
-            { "Warm pad", "Pad", { { "attack", 1200 }, { "sustain", 0.8f }, { "filterOn", 1 }, { "freq", 1800 }, { "mod", 0.4f }, { "res", 0.15f }, { "slope", 2 },
-                                   { "spread", 0.6f }, { "detune", 10 }, { "detuneMix", 0.5f }, { "smearOn", 1 }, { "smearSize", 0.7f }, { "smearLevel", 0.5f }, { "smearSend", 1 } } },
+            // the owner's POG2 setting (run G1), fitted by rendering the test file (tools/pog2_compare.py): ATTACK 2 s,
+            // 18 dB/oct at 1 kHz, the +-10 cent copies 15..19 dB under the note (MIX 0.39). Held notes ~2 dB, plucks ~4 dB.
+            { "POG2 swell", "Pad", { { "attack", 2000 }, { "freq", 1000 }, { "detune", 10.1f }, { "detuneMix", 0.39f } } },
+            { "Warm pad", "Pad", { { "attack", 1200 }, { "sustain", 0.8f }, { "freq", 1800 }, { "mod", 0.4f }, { "res", 0.15f },
+                                   { "spread", 0.6f }, { "detuneMix", 0.5f }, { "smearOn", 1 }, { "smearSize", 0.7f }, { "smearLevel", 0.5f }, { "smearSend", 1 } } },
             { "Glass pad", "Pad", { { "attack", 900 }, { "sustain", 0.6f }, { "voiceMix", 0.4f }, { "voiceWave", 5 }, { "voiceOct", 2 }, { "voiceTone", 5000 },
                                     { "voiceUnison", 0.3f }, { "spread", 0.5f }, { "smearOn", 1 }, { "smearSize", 0.65f }, { "smearLevel", 0.45f } } },
-            { "Frozen strings", "Pad", { { "attack", 1500 }, { "sustain", 0.7f }, { "voiceMix", 0.35f }, { "voiceWave", 1 }, { "voiceTone", 4000 },
-                                         { "voiceCharacter", 0.5f }, { "detune", 7 }, { "detuneMix", 0.5f }, { "smearOn", 1 }, { "smearSize", 0.8f }, { "smearLevel", 0.5f }, { "smearDark", 1 } } },
-            // POG2: the owner's favourite setting (run G1), fitted by rendering the test file (tools/pog2_compare.py): POG2 shape
-            // with its own gain, ATTACK 2 s; 18 dB/oct low-pass at 1 kHz (RES 0.23 = Q 1: the measured third-order Butterworth);
-            // the two +-10 cent copies 15..19 dB under the note in mono (MIX 0.22). Held notes within ~2 dB, plucks ~4 dB.
-            { "POG2 swell", "Pad", { { "attack", 2000 }, { "swellShape", 2 }, { "filterOn", 1 }, { "freq", 1000 }, { "slope", 4 }, { "res", 0.f },
-                                     { "detune", 10.1f }, { "detuneMix", 0.39f } } },
             { "Amp in the room", "Feedback", { { "attack", 80 }, { "sustain", 0.5f }, { "feedback", 0.8f }, { "fbDistance", 0.3f }, { "fbRise", 1.2f }, { "fbTone", 1600 }, { "dry", 0.3f } } },
-            { "Octave scream", "Feedback", { { "attack", 30 }, { "sustain", 0.4f }, { "feedback", 1.0f }, { "fbDistance", 0.27f }, { "fbRise", 0.6f }, { "fbTone", 2500 }, { "dry", 0.5f } } },
             { "Slow howl", "Feedback", { { "attack", 400 }, { "sustain", 0.7f }, { "feedback", 0.7f }, { "fbDistance", 0.55f }, { "fbRise", 2.5f }, { "fbTone", 1300 },
                                          { "smearOn", 1 }, { "smearSize", 0.6f }, { "smearLevel", 0.35f } } } };
         return p;
     }
-
-    // VOICE / VIBRATO part of each preset (same order as kPresets)
-    struct VoicePreset { float mix; int wave, oct; float tone, unison, drift, detune; int chorus; float stab, vib, vibDelay; int vibTarget; };
-    const VoicePreset kVoicePresets[] =
-    {
-        //  mix  wave oct  tone    uni   drift detune chorus stab  vib   delay target
-        { 0.0f, 1, 1, 3000.f, 0.0f, 0.0f, 15.f, 0, 0.0f, 0.f,  0.4f, 0 },   // Init
-        { 0.0f, 1, 1, 3000.f, 0.0f, 0.0f, 15.f, 0, 0.0f, 18.f, 0.45f, 1 },  // Violin swell
-        { 0.0f, 1, 1, 3000.f, 0.0f, 0.0f, 15.f, 0, 0.0f, 0.f,  0.4f, 0 },   // Slow gear
-        { 0.0f, 1, 1, 3000.f, 0.0f, 0.0f, 15.f, 0, 0.0f, 0.f,  0.4f, 0 },   // Wah bloom
-        { 0.3f, 5, 2, 4000.f, 0.0f, 0.2f, 15.f, 2, 0.0f, 0.f,  0.4f, 0 },   // Pad
-        { 0.0f, 1, 1, 3000.f, 0.0f, 0.0f, 15.f, 0, 0.0f, 0.f,  0.4f, 0 },   // Closing door
-        { 0.0f, 1, 1, 3000.f, 0.0f, 0.0f, 15.f, 0, 0.0f, 0.f,  0.4f, 0 },   // Pick attack
-        { 0.0f, 1, 1, 3000.f, 0.0f, 0.0f, 15.f, 0, 0.0f, 0.f,  0.4f, 0 },   // Amp feedback
-        { 0.0f, 1, 1, 3000.f, 0.0f, 0.0f, 15.f, 0, 0.0f, 0.f,  0.4f, 0 },   // Pulse spread
-        { 0.5f, 7, 1, 2200.f, 0.4f, 0.6f, 12.f, 1, 0.0f, 0.f,  0.4f, 0 },   // VG pad
-        { 0.6f, 1, 1, 1800.f, 0.3f, 0.1f, 10.f, 3, 0.7f, 0.f,  0.4f, 0 },   // 80s brass
-        { 0.6f, 0, 1, 5000.f, 0.8f, 0.2f, 22.f, 2, 0.0f, 0.f,  0.4f, 0 },   // Supersaw pad
-        { 0.0f, 1, 1, 3000.f, 0.0f, 0.0f, 15.f, 0, 0.0f, 22.f, 0.35f, 1 },  // Violin
-        { 0.45f, 7, 1, 2400.f, 0.3f, 0.7f, 12.f, 1, 0.0f, 0.f, 0.4f, 0 },  // Warble
-        { 0.0f, 1, 1, 3000.f, 0.0f, 0.0f, 15.f, 0, 0.0f, 0.f,  0.4f, 0 },   // Dynamic wah
-        { 0.4f, 5, 2, 5000.f, 0.2f, 0.3f, 10.f, 2, 0.0f, 0.f,  0.4f, 0 },   // Glass pad
-        { 0.0f, 1, 1, 3000.f, 0.0f, 0.0f, 15.f, 0, 0.0f, 7.f,  0.0f, 2 },   // Bowed (VG-8): +-7 cents on the guitar, from the pick
-        { 0.0f, 1, 1, 3000.f, 0.0f, 0.0f, 15.f, 0, 0.0f, 14.f, 0.35f, 2 },  // Violin body: violinist's vibrato after 0.35 s
-    };
-    // PICK (filter by pick strength) and DETUNE wobble per preset
-    const float kPickFilter[] = { 0, 0, 0, 0.5f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.8f, 0, 0, 0 };
-    const float kWobble[]     = { 0, 0.3f, 0, 0, 0.4f, 0, 0, 0, 0, 0, 0, 0, 0, 0.5f, 0, 0, 0.3f, 0 };
-    static_assert (sizeof (kPickFilter) / sizeof (float) == (size_t) kNumPresets && sizeof (kWobble) / sizeof (float) == (size_t) kNumPresets, "");
-    static_assert (sizeof (kVoicePresets) / sizeof (kVoicePresets[0]) == (size_t) kNumPresets, "one voice entry per preset");
 }
 
 // tremolo note values: name and length of one tremolo cycle in beats
@@ -509,6 +453,8 @@ PolySwellProcessor::PolySwellProcessor()
     pDriftOn = apvts.getRawParameterValue ("voiceDriftOn");
 
     setLatencySamples (swello::kLatencySamples);
+    setCurrentProgram (0);   // a new instance starts as Default (a saved session overrides it in setStateInformation)
+    undo.clearUndoHistory();
 }
 
 void PolySwellProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
@@ -657,7 +603,7 @@ void PolySwellProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     p.fbOneWins     = apvts.getRawParameterValue ("fbOneWins")->load() > 0.5f;
     p.uiTrack       = editorOpen.load (std::memory_order_relaxed);
     p.even          = pEven->load();
-    p.bowedBody     = pBowedBody->load() > 0.5f;
+    p.bowedBody     = pBowedBody->load() > 0.5f && apvts.getRawParameterValue ("filterOn")->load() > 0.5f;   // BODY is part of FILTER
 
     swello::VoiceFx::Settings vfx;
     vfx.unison   = effective (ex.voiceUnison, pUnisonOn, 0.f);
@@ -792,7 +738,7 @@ void PolySwellProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     // ---- BODY IR (violin bodies or your own): convolution on the wet block, blended by BODY MIX
     const int irChoice = (int) std::lround (pBodyIr->load());
     if (irChoice != requestedIr.load()) { requestedIr = irChoice; triggerAsyncUpdate(); }
-    bodyMixSmooth.setTargetValue (irChoice > 0 && loadedIr == irChoice ? pBodyMix->load() : 0.f);
+    bodyMixSmooth.setTargetValue (irChoice > 0 && loadedIr == irChoice && apvts.getRawParameterValue ("filterOn")->load() > 0.5f ? pBodyMix->load() : 0.f);
     if (bodyMixSmooth.isSmoothing() || bodyMixSmooth.getTargetValue() > 0.f)
     {
         juce::dsp::AudioBlock<float> inB (wetBuf.getArrayOfWritePointers(), 2, (size_t) n), outB (convBuf.getArrayOfWritePointers(), 2, (size_t) n);
@@ -875,26 +821,16 @@ void PolySwellProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
 }
 
 // ---------------------------------------------------------------- presets
-int PolySwellProcessor::getNumPrograms() { return kNumPresets + (int) newPresets().size(); }
+int PolySwellProcessor::getNumPrograms() { return (int) newPresets().size(); }
 const juce::String PolySwellProcessor::getProgramName (int i)
 {
-    i = juce::jlimit (0, getNumPrograms() - 1, i);
-    return i < kNumPresets ? kPresets[i].name : newPresets()[(size_t) (i - kNumPresets)].name;
+    return newPresets()[(size_t) juce::jlimit (0, (int) newPresets().size() - 1, i)].name;
 }
 juce::String PolySwellProcessor::programTag (int i)
 {
-    return i < kNumPresets ? "Classic" : newPresets()[(size_t) juce::jlimit (0, (int) newPresets().size() - 1, i - kNumPresets)].tag;
+    return newPresets()[(size_t) juce::jlimit (0, (int) newPresets().size() - 1, i)].tag;
 }
-
-// a PolySwell II preset: Init, the gen-2 controls at rest, then what the preset lists
-void PolySwellProcessor::applyNewPreset (int index)
-{
-    const auto& np = newPresets()[(size_t) index];
-    setCurrentProgram (0);
-    for (auto& kv : np.set) setParam (kv.first, kv.second);
-    currentProgram = kNumPresets + index;
-    currentPresetName = np.name;
-}
+void PolySwellProcessor::applyNewPreset (int index) { setCurrentProgram (index); }
 
 // ---------------------------------------------------------------- MIDI learn
 void PolySwellProcessor::learnCc (const juce::String& id)
@@ -957,53 +893,20 @@ void PolySwellProcessor::setParam (const char* id, float v)
 void PolySwellProcessor::setCurrentProgram (int i)
 {
     i = juce::jlimit (0, getNumPrograms() - 1, i);
-    if (i >= kNumPresets) { applyNewPreset (i - kNumPresets); return; }
-    // the PolySwell II controls at rest (the classic presets were made before they existed)
-    for (auto id : { "levelMatch", "smearDark", "smearGate", "smearSend", "even" }) setParam (id, 0.f);
-    setParam ("fbAmp", 1.f); setParam ("fbDistance", 0.3f); setParam ("fbOneWins", 1.f); setParam ("fbRise", 1.2f); setParam ("fbTone", 1100.f);
-    setParam ("smearLevel", 0.5f); setParam ("smearSize", 0.5f);
-    setParam ("vibRate", 5.5f); setParam ("vibHuman", 0.f);
+    // Default: every parameter at its default (bypass, limiter and low latency belong to the setup and stay)
+    for (auto* prm : getParameters())
+        if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (prm))
+        {
+            const auto id = rp->getParameterID();
+            if (id == "bypass" || id == "limiter" || id == "lowLatency" || id == "filter" || id == "resLow" || id == "resHigh") continue;
+            rp->setValueNotifyingHost (rp->getDefaultValue());
+        }
+    gen2Defaults();
+    for (auto& kv : defaultSetup()) setParam (kv.first, kv.second);
+    const auto& np = newPresets()[(size_t) i];
+    for (auto& kv : np.set) setParam (kv.first, kv.second);
     currentProgram = i;
-    const auto& p = kPresets[i];
-    setParam ("vol", p.vol);       setParam ("attack", p.attack);   setParam ("freq", p.freq);
-    setParam ("mod", p.mod);       setParam ("slope", (float) p.slope);
-    setParam ("filterOn", p.filter > 0 ? 1.f : 0.f);
-    setParam ("res", p.filter == 2 ? p.resHigh : p.resLow);
-    setParam ("sustain", p.sustain); setParam ("dry", p.dry);
-    // gen-1 presets give DETUNE in cents with a fixed half blend: cents go to the hidden amount, the knob to half
-    setParam ("detune", p.detune > 0.f ? p.detune : 10.1f); setParam ("detuneMix", p.detune > 0.f ? 0.5f : 0.f);
-    setParam ("touch", p.touch);   setParam ("follow", p.follow);   setParam ("feedback", p.feedback);
-    setParam ("tremolo", p.tremolo); setParam ("tremRate", p.tremRate); setParam ("spread", p.spread);
-    const auto& v = kVoicePresets[i];
-    setParam ("voiceMix", v.mix);        setParam ("voiceWave", (float) v.wave); setParam ("voiceOct", (float) v.oct);
-    setParam ("voiceTone", v.tone);      setParam ("voiceUnison", v.unison);     setParam ("voiceDrift", v.drift);
-    setParam ("voiceDetune", v.detune);  setParam ("voiceChorus", (float) v.chorus); setParam ("voiceStab", v.stab);
-    setParam ("voiceWarmth", 0.f); setParam ("voiceVowel", 0.f); setParam ("voiceVowelPick", 0.5f);
-    setParam ("voiceScoop", 0.f);  setParam ("voiceBreath", 0.f); setParam ("vocalOn", 1.f);
-    setParam ("smearOn", 0.f);     // factory presets leave SMEAR off (until presets use it)
-    setParam ("voiceString", 0.f); setParam ("voiceLife", 0.f); setParam ("voiceCharacter", 0.f); setParam ("voiceRes", 0.f); setParam ("voiceDecay", 0.18f);
-    setParam ("smearThresh", -80.f);
-    setParam ("vibDepth", v.vib);        setParam ("vibDelay", v.vibDelay);      setParam ("vibTarget", (float) v.vibTarget);
-    setParam ("pickFilter", kPickFilter[i]);
-    // bowed extras: the VG-8 swell shape and smooth re-picks; everything else uses the classic swell
-    const bool violinBody = juce::String (kPresets[i].name) == "Violin body";
-    const bool bowed = juce::String (kPresets[i].name).startsWith ("Bowed") || violinBody;
-    setParam ("swellShape", 2.f); setParam ("smoothRepick", bowed ? 1.f : 0.f); setParam ("even", 0.f);   // POG2 curve in every preset (owner)
-    setParam ("bowedBody", bowed && ! violinBody ? 1.f : 0.f);
-    setParam ("bodyIr", violinBody ? 1.f : 0.f); setParam ("bodyMix", violinBody ? 0.9f : 1.f);
-    setParam ("driveOn", violinBody ? 1.f : 0.f); setParam ("driveType", violinBody ? 1.f : 0.f);
-    setParam ("driveAmt", violinBody ? 0.65f : 0.35f); setParam ("driveTone", violinBody ? 0.4f : 0.5f);
-    setParam ("driveWow", violinBody ? 0.f : 0.2f);
-    setParam ("voiceGlide", violinBody ? 0.05f : 0.f); setParam ("voiceMono", 0.f); setParam ("vibHuman", violinBody ? 1.f : 0.f);
-    if (violinBody) { setParam ("even", 0.5f); setParam ("bodyMix", 1.f); setParam ("voiceMix", 0.45f); setParam ("voiceWave", 1.f);
-                      setParam ("voiceString", 0.5f); setParam ("voiceTone", 6000.f); }
-    setParam ("vibRate", bowed ? 4.5f : 5.5f);  setParam ("tremShape", 0.f); setParam ("tremSyncOn", 0.f);
-    for (const auto& s : switchables()) setParam (s.onId, 1.f);   // a preset switches every knob back on
-    for (auto id : { "bloomOn", "motionOn", "voiceOn" }) setParam (id, 1.f);
-    setParam ("swellShape", 2.f);   // the POG2's swell in every preset (other curves: gear > Swell curve)
-    if (i == 0) setParam ("slope", 4.f);   // Init: the POG2's swell and filter (the gen-2 defaults)
-    setParam ("sync", 0.f);        // presets never change bypass or limiter
-    currentPresetName = kPresets[i].name;
+    currentPresetName = np.name;
     userPresetLoaded = false;
 }
 

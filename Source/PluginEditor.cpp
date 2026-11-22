@@ -1689,7 +1689,7 @@ struct SignalWindow : juce::Component, juce::Timer
         auto ampOf = [&] (float strength) { return std::pow (10.f, strength * 12.f * (1.f - even) / 40.f); };   // half the dB, so soft picks stay readable
         float pkRef = 1.0e-6f;
         for (int k = 0; k <= 120; ++k) pkRef = juce::jmax (pkRef, swelled (Tw * (float) k / 120.f, A0));
-        const float full = pkRef / 0.62f;   // an average pick peaks at 62 % of the height; harder ones go higher
+        const float full = pkRef * ampOf (1.f) / 0.95f;   // the hardest pick peaks just under the top (nothing is squashed)
         auto ay = [&] (float a) { return pa.getBottom() - pa.getHeight() * juce::jlimit (0.f, 1.f, a / full); };
         auto curveOf = [&] (float amp, float att, float upTo)
         {
@@ -1752,8 +1752,8 @@ struct SignalWindow : juce::Component, juce::Timer
             const float feelMul = std::pow (2.f, -touch * pk.strength * 2.f);
             const String how = pk.strength > 0.3f ? "HARD" : pk.strength < -0.3f ? "SOFT" : "PICK";
             String why;
-            if (std::abs (pk.mul - feelMul) > 0.06f * feelMul) why = " PACE";
-            else if (std::abs (feelMul - 1.f) > 0.06f) why = " FEEL";
+            const bool byFeel = std::abs (feelMul - 1.f) > 0.06f, byPace = std::abs (pk.mul - feelMul) > 0.06f * feelMul;
+            why = byFeel && byPace ? " FEEL+PACE" : byPace ? " PACE" : byFeel ? " FEEL" : "";
             caption = how + " " + ms (att).toUpperCase() + why;
         }
         else
@@ -2018,6 +2018,39 @@ struct WaveScope : juce::Component, juce::Timer, juce::SettableTooltipClient
     PolySwellProcessor& proc;
     Colour ac;
     float phase = 0.f, lastU = -1.f, lastW = -1.f, lastT = -1.f, lastO = -1.f;
+};
+
+// a choice of LFO shapes as pictures (sine, triangle, square)
+struct ShapeSeg : juce::Component, juce::SettableTooltipClient
+{
+    ShapeSeg (PolySwellProcessor& p, const String& id, Colour a) : ac (a), bound (p, id, [this] { repaint(); })
+    { setMouseCursor (juce::MouseCursor::PointingHandCursor); setTooltip ("Tremolo shape: sine, triangle or square."); }
+    void paint (Graphics& g) override
+    {
+        const auto b = getLocalBounds().toFloat().reduced (0.5f);
+        const int cur = juce::roundToInt (bound.value);
+        const float w = b.getWidth() / 3.f;
+        for (int i = 0; i < 3; ++i)
+        {
+            const Rect c (b.getX() + w * (float) i, b.getY(), w, b.getHeight());
+            if (i == cur) { g.setColour (ac.withAlpha (0.85f)); g.fillRoundedRectangle (c.reduced (1.f), 4.f); }
+            juce::Path p;
+            const Rect ic = c.reduced (5.f, 6.f);
+            for (int k = 0; k <= 24; ++k)
+            {
+                const float x = (float) k / 24.f, ph = x * 2.f * kPi;
+                float y = i == 0 ? std::sin (ph) : i == 1 ? (2.f / kPi) * std::asin (std::sin (ph)) : (std::sin (ph) >= 0.f ? 1.f : -1.f);
+                const float px = ic.getX() + x * ic.getWidth(), py = ic.getCentreY() - y * ic.getHeight() * 0.5f;
+                if (k == 0) p.startNewSubPath (px, py); else p.lineTo (px, py);
+            }
+            g.setColour (i == cur ? Colour (0xff141018) : ac.interpolatedWith (juce::Colours::white, 0.3f));
+            g.strokePath (p, juce::PathStrokeType (1.4f));
+        }
+        g.setColour (ac.withAlpha (0.6f)); g.drawRoundedRectangle (b, 5.f, 1.f);
+    }
+    void mouseDown (const juce::MouseEvent& e) override { bound.set ((float) juce::jlimit (0, 2, (int) (e.position.x / ((float) getWidth() / 3.f)))); }
+    Colour ac;
+    Bound bound;
 };
 
 // the nine waves as buttons, each with a small picture of its shape
@@ -2350,18 +2383,19 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         // FILTER
         knobRow (0, { { "mod", "MOD" }, { "res", "RES" }, { "pickFilter", "DYN" } });
         {
-            bodyC = chip (Chip::custom, "", "BODY", kMods[0].ac, "Body: the VG-8 bowed tone curve and violin body impulse responses.", g);
+            bodyC = chip (Chip::custom, "", "BODY", kMods[0].ac, "BODY: an instrument's resonance on the sound - the VG-8 bowed tone curve, or a violin body. Part of FILTER (off with it).", g);
             bodyC->textFn = [this]
             {
                 const int ir = juce::roundToInt (getParam ("bodyIr"));
                 if (ir > 0) return proc.apvts.getParameter ("bodyIr")->getCurrentValueAsText().toUpperCase();
-                return String (getParam ("bowedBody") > 0.5f ? "BODY VG-8" : "BODY OFF");
+                return String (getParam ("bowedBody") > 0.5f ? "VG-8 TONE" : "OFF");
             };
             bodyC->litFn = [this] { return getParam ("bodyIr") > 0.5f || getParam ("bowedBody") > 0.5f; };
             bodyC->setSize (96, 22);
             bodyC->onPress = [this] { bodyMenu(); };
-            auto* mix = valueChip ("bodyMix", "MIX", 76, kMods[0].ac, g);
-            flow ({ bodyC, mix }, rowX (0), rowY (0, 0));
+            bodyMixC = valueChip ("bodyMix", "MIX", 76, kMods[0].ac, g);   // only for a body IR (faded otherwise)
+            label ("BODY", { rowX (0), rowY (0, 0), 40.f, 22.f }, 10.5f, col::chipText, juce::Justification::centredLeft, true, 0.2f);
+            flow ({ bodyC, bodyMixC }, rowX (0) + 44.f, rowY (0, 0));
         }
         // FEEDBACK
         knobRow (1, { { "feedback", "FEEDBACK" }, { "fbDistance", "DISTANCE" }, { "fbRise", "RISE" }, { "fbTone", "TONE" } });
@@ -2369,25 +2403,27 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
                 chip (Chip::toggle, "fbOneWins", "ONE WINS", kMods[1].ac, "ONE WINS: in a chord the loudest note takes most of the feedback, as in a real amp.", g),
                 chip (Chip::menu, "fbMode", "", kMods[1].ac, "Bloom: the feedback grows on held notes. Immediate: an overtone from the pick, like an octave pedal.", g) },
               rowX (1), rowY (1, 0));
-        // MOTION: four columns; each knob with its own settings under it, each setting named
+        // MOTION: VIBRATO | TREMOLO on top (each knob with its settings beside it), SPREAD | DETUNE below
         {
             const auto r = moduleRect (2);
             const Colour ac = kMods[2].ac;
+            const float bw = (r.getWidth() - 24.f) * 0.5f, x0 = r.getX() + 10.f, x1 = x0 + bw + 4.f;
+            const float yA = r.getY() + 38.f, hA = 112.f, yB = yA + hA + 4.f, hB = r.getBottom() - 8.f - yB;
+            const Rect boxes[4] = { { x0, yA, bw, hA }, { x1, yA, bw, hA }, { x0, yB, bw, hB }, { x1, yB, bw, hB } };
             const char* ids[4] = { "vibDepth", "tremolo", "spread", "detuneMix" }; const char* names[4] = { "VIBRATO", "TREMOLO", "SPREAD", "DETUNE" };
-            const float colW = (r.getWidth() - 20.f) / 4.f;
             for (int c = 0; c < 4; ++c)
             {
-                const float cx = r.getX() + 10.f + colW * ((float) c + 0.5f);
-                subBoxes.push_back ({ Rect (cx - colW * 0.5f + 2.f, r.getY() + 38.f, colW - 4.f, r.getHeight() - 46.f), ac });
-                knob (ids[c], names[c], 2, cx, r.getY() + 72.f, ac, g, 54);
-                label (names[c], { cx - 40, r.getY() + 100.f, 80, 13 }, 10.5f, col::chipText, juce::Justification::centred, true, 0.12f);
+                const auto& bx = boxes[c];
+                subBoxes.push_back ({ bx, ac });
+                const float kcx = c == 3 ? bx.getCentreX() : bx.getX() + 32.f, kcy = bx.getY() + (c < 2 ? 40.f : 28.f);
+                knob (ids[c], names[c], 2, kcx, kcy, ac, g, 50);
+                label (names[c], { kcx - 40.f, kcy + 26.f, 80.f, 12.f }, 10.f, col::chipText, juce::Justification::centred, true, 0.12f);
             }
-            auto cxOf = [&] (int c) { return r.getX() + 10.f + colW * ((float) c + 0.5f); };
-            auto valueOnly = [&] (const char* id, const char* nm) { auto* k = valueChip (id, "", 0, ac, g); k->setName (nm); return k; };
+            auto valueOnly = [&] (const char* id) { return valueChip (id, "", 0, ac, g); };
             auto* vt = chip (Chip::custom, "", "VOICE", ac, "What the vibrato moves (voice, guitar or both). Lit: HUMAN, it starts shallow and slow, then settles.", g);
             vt->textFn = [this] { return shortChoice (proc.apvts.getParameter ("vibTarget")->getCurrentValueAsText()); };
             vt->litFn = [this] { return getParam ("vibHuman") > 0.5f; };
-            vt->setSize (62, 22);
+            vt->setSize (64, 22);
             vt->onHover = [this] (bool isOn) { window.setFocus ("vibDepth", isOn); };
             vt->onPress = [this, vt]
             {
@@ -2405,15 +2441,16 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
                     vt->repaint();
                 });
             };
-            const float y0 = r.getY() + 118.f;
-            named (valueOnly ("vibRate", "RATE"), "RATE", cxOf (0), y0);
-            named (valueOnly ("vibDelay", "DELAY"), "DELAY", cxOf (0), y0 + 34.f);
-            named (vt, "ON", cxOf (0), y0 + 68.f);
-            named (valueOnly ("tremRate", "RATE"), "RATE", cxOf (1), y0);
-            auto* shape = chip (Chip::menu, "tremShape", "", ac, "Tremolo shape.", g); shape->setSize (62, 22);
-            named (shape, "SHAPE", cxOf (1), y0 + 34.f);
-            auto* mode = chip (Chip::menu, "spreadMode", "", ac, "How SPREAD places the notes.", g); mode->setSize (62, 22);
-            named (mode, "PLACE", cxOf (2), y0);
+            const float sx0 = boxes[0].getRight() - 38.f, sx1 = boxes[1].getRight() - 38.f;
+            named (valueOnly ("vibRate"), "RATE", sx0, yA + 3.f);
+            named (valueOnly ("vibDelay"), "DELAY", sx0, yA + 37.f);
+            named (vt, "ON", sx0, yA + 71.f);
+            named (valueOnly ("tremRate"), "RATE", sx1, yA + 3.f);
+            auto* shape = shapeSegs.add (new ShapeSeg (proc, "tremShape", ac));
+            shape->setSize (66, 22); addAndMakeVisible (shape); g.add (shape);
+            named (shape, "SHAPE", sx1, yA + 37.f);
+            auto* mode = chip (Chip::menu, "spreadMode", "", ac, "How SPREAD places the notes.", g); mode->setSize (64, 22);
+            named (mode, "PLACE", boxes[2].getRight() - 38.f, yB + 6.f);
         }
         // LAYER, across the full width: knobs, octave / MONO / UNISON (a fader) on the left; on the right a scope of the
         // voice's wave (TONE rounds it, UNISON spreads copies that drift in and out of phase) over the nine wave buttons
@@ -2493,9 +2530,9 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
     void presetMenu()
     {
         juce::PopupMenu m;
-        for (auto* tag : { "Lead", "Pad", "Feedback", "Classic" })
+        for (auto* tag : { "Default", "Lead", "Pad", "Feedback" })
         {
-            m.addSectionHeader (String (tag) == "Classic" ? String ("Classic (from PolySwell 1)") : String (tag));
+            m.addSectionHeader (tag);
             for (int i = 0; i < proc.getNumPrograms(); ++i)
                 if (PolySwellProcessor::programTag (i) == tag)
                     m.addItem (100 + i, proc.getProgramName (i), true, ! proc.userPresetLoaded && i == proc.getCurrentProgram());
@@ -2540,11 +2577,13 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
     void bodyMenu()
     {
         juce::PopupMenu m;
-        m.addItem (1, "VG-8 bowed tone curve", true, getParam ("bowedBody") > 0.5f);
-        m.addSectionHeader ("Body impulse response");
+        const bool vg = getParam ("bowedBody") > 0.5f, anyIr = getParam ("bodyIr") > 0.5f;
+        m.addItem (3, "Off", true, ! vg && ! anyIr);
+        m.addItem (1, "VG-8 bowed tone (an EQ curve)", true, vg && ! anyIr);
+        m.addSectionHeader ("Violin body (an impulse response)");
         const auto names = proc.apvts.getParameter ("bodyIr")->getAllValueStrings();
         const int cur = juce::roundToInt (getParam ("bodyIr"));
-        for (int i = 0; i < names.size(); ++i)
+        for (int i = 1; i < names.size(); ++i)
             if (i < 8 || proc.customIr.existsAsFile())
                 m.addItem (10 + i, i == 8 ? "Your IR: " + proc.customIr.getFileNameWithoutExtension() : names[i], true, i == cur);
         m.addSeparator();
@@ -2552,8 +2591,9 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         m.setLookAndFeel (&look);
         m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (bodyC), [this] (int r)
         {
-            if (r == 1) setParam ("bowedBody", getParam ("bowedBody") > 0.5f ? 0.f : 1.f);
-            else if (r >= 10) setParam ("bodyIr", (float) (r - 10));
+            if (r == 3) { setParam ("bowedBody", 0.f); setParam ("bodyIr", 0.f); }
+            else if (r == 1) { setParam ("bowedBody", 1.f); setParam ("bodyIr", 0.f); }
+            else if (r >= 10) { setParam ("bodyIr", (float) (r - 10)); setParam ("bowedBody", 0.f); }
             else if (r == 2)
             {
                 chooser = std::make_unique<juce::FileChooser> ("Load an impulse response", proc.customIr.existsAsFile() ? proc.customIr : juce::File(), "*.wav;*.aif;*.aiff;*.flac");
@@ -2683,6 +2723,7 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         if (getParam ("voiceOn") > 0.5f && getParam ("voiceMix") > 0.f) act |= 8;
         if (getParam ("smearOn") > 0.5f) act |= 32;
         if (gateHold != nullptr) { const float a = getParam ("smearGate") > 0.5f ? 1.f : 0.4f; gateHold->setAlpha (a); gateCut->setAlpha (a); }
+        if (bodyMixC != nullptr) bodyMixC->setAlpha (getParam ("bodyIr") > 0.5f ? 1.f : 0.35f);
         if (act != drawer.mask || drawer.open != panelOpen) { drawer.mask = act; drawer.open = panelOpen; drawer.repaint(); }
     }
 
@@ -2885,13 +2926,14 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
                gearB { IconButton::gear, "Settings: re-pick, limiter, low latency, MIDI out, window size" },
                panelB { IconButton::panel, "Show or hide the effects panel" };
     Lcd lcd;
-    Chip* saveC = nullptr; Chip* skinC = nullptr;
+    Chip* saveC = nullptr; Chip* skinC = nullptr; juce::Component* bodyMixC = nullptr;
     const Skin* currentSkin = nullptr; Chip* abC[2] { nullptr, nullptr }; Chip* bodyC = nullptr;
     Led onLed { proc, "bypass", true, "Lit while the pedal is on." };
     FootSwitch onSw;
     DrawerTab drawer;
     std::vector<std::pair<Rect, Colour>> subBoxes;
     std::unique_ptr<juce::Component> waveScope, waveGrid;
+    juce::OwnedArray<juce::Component> shapeSegs;
     Knob* gateHold = nullptr; Knob* gateCut = nullptr;
     std::vector<std::pair<String, Rect>> pedalGroups;
     String learnId;
