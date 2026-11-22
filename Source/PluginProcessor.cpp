@@ -1093,6 +1093,7 @@ void PolySwellProcessor::getStateInformation (juce::MemoryBlock& dest)
     state.setProperty ("uiPedalsOpen", uiPedalsOpen, nullptr);
     state.setProperty ("uiScale", uiScale, nullptr);
     state.setProperty ("uiSkin", uiSkin, nullptr);
+    state.setProperty ("uiWindowNotes", uiWindowNotes, nullptr);
     juce::StringArray ccs;
     for (int c = 0; c < 128; ++c) if (const int k = ccMap[(size_t) c].load(); k >= 0) ccs.add (juce::String (c) + ":" + ccParams[k]->getParameterID());
     state.setProperty ("ccMap", ccs.joinIntoString (","), nullptr);
@@ -1128,6 +1129,7 @@ void PolySwellProcessor::setStateInformation (const void* data, int size)
             uiPedalsOpen = (bool) vt.getProperty ("uiPedalsOpen", true);
             uiScale = juce::jlimit (0.75f, 2.f, (float) (double) vt.getProperty ("uiScale", 1.0));
             uiSkin = juce::jlimit (0, 2, (int) vt.getProperty ("uiSkin", 0));
+            uiWindowNotes = (bool) vt.getProperty ("uiWindowNotes", false);
             for (int i = 0; i < 3; ++i)
             {
                 uiFold[(size_t) i]    = (bool) vt.getProperty ("uiFold" + juce::String (i), false);

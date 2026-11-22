@@ -73,13 +73,13 @@ constexpr float kPedalX = 22, kPedalY = 56, kPedalW = 392, kPedalH = 646;
 constexpr float kPanelX = 432, kPanelY = 56, kPanelW = 622, kPanelH = 646;
 constexpr float kModW = 293, kModH = 199.3f;
 
-// panel: FILTER | FEEDBACK, MOTION across the full width, LAYER | SPACE (HOLD lives on the pedal, index 4 unused)
+// panel: FILTER | FEEDBACK, MOTION | SPACE, LAYER across the full width (index 4 unused)
 Rect moduleRect (int i)
 {
     const float x0 = kPanelX + 12, y0 = kPanelY + 12;
     if (i == 4) return {};
-    if (i == 2) return { x0, y0 + kModH + 12, kPanelW - 24, kModH };
-    const float col = (i == 1 || i == 5) ? 1.f : 0.f, row = i < 2 ? 0.f : 2.f;
+    if (i == 3) return { x0, y0 + 2.f * (kModH + 12), kPanelW - 24, kModH };   // LAYER: the full width
+    const float col = (i == 1 || i == 5) ? 1.f : 0.f, row = i < 2 ? 0.f : 1.f;   // MOTION | SPACE in the middle
     return { x0 + col * (kModW + 12), y0 + row * (kModH + 12), kModW, kModH };
 }
 
@@ -752,7 +752,12 @@ struct SignalWindow : juce::Component, juce::Timer
     static constexpr float kNowFrac = 0.68f, kFLo = 72.f, kFHi = 1500.f, kColSec = 1.f / 30.f;
     struct Col { int n = 0; float midi[kMaxN] {}, lvl[kMaxN] {}, hot[kMaxN] {}, fb[kMaxN] {}; float cut = 0.f, outDb = -120.f, inDb = -120.f; bool pick = false; };
 
-    explicit SignalWindow (PolySwellProcessor& p) : proc (p) { setInterceptsMouseClicks (false, false); startTimerHz (30); }
+    explicit SignalWindow (PolySwellProcessor& p) : proc (p) { setInterceptsMouseClicks (true, false); startTimerHz (30); }
+
+    // only the NOTES switch in the top-left corner takes clicks; the rest of the glass lets them through
+    Rect notesRect() const { return { 8.f, 2.f, 52.f, 12.f }; }
+    bool hitTest (int x, int y) override { return notesRect().expanded (3.f).contains ((float) x, (float) y); }
+    void mouseDown (const juce::MouseEvent&) override { proc.uiWindowNotes = ! proc.uiWindowNotes; repaint(); }
 
     // the glow of the window follows the skin (the effects' own colours - filter, feedback, layer ... - stay)
     void setSkin (const Skin& s)
@@ -846,6 +851,9 @@ struct SignalWindow : juce::Component, juce::Timer
         const int n = live ? juce::jmin (kMaxN, proc.readVoiceNotes (v)) : 0;
         float loudest = 0.f;
         for (int j = 0; j < n; ++j) loudest = juce::jmax (loudest, v[j].level);
+        liveN = 0;   // each sounding note: pitch, level, time since its pick (for the dots on the swell)
+        for (int j = 0; j < n; ++j)
+            if (v[j].hz >= 30.f) { liveMidi[liveN] = 69.f + 12.f * std::log2 (v[j].hz / 440.f); liveLvl[liveN] = v[j].level; liveT[liveN] = v[j].timeSec; ++liveN; }
         lvlRef = juce::jmax (lvlRef * 0.995f, loudest, 1.0e-6f);
         const bool fbOn = feedbackOn(), immediate = P ("fbMode") > 0.5f;
         const float A = P ("attack") * 0.001f, rise = juce::jmax (0.05f, P ("fbRise"));
@@ -911,10 +919,11 @@ struct SignalWindow : juce::Component, juce::Timer
     // ---------------------------------------------------------------- the swell picture
     static constexpr float kT = 3.5f;                 // seconds across the picture
     static float natural (float t) { return t < 0.f ? 0.f : std::pow (10.f, -8.f * t / 20.f); }   // a plucked note: about 8 dB/s
-    static float swellGain (float ph, bool bowed)
+    static float swellGain (float ph, int shape)   // 0 classic, 1 bowed, 2 POG2 (as the engine)
     {
         ph = juce::jlimit (0.f, 1.f, ph);
-        if (! bowed) return ph * ph;
+        if (shape == 2) return (1.f - std::exp (-3.f * ph)) / (1.f - std::exp (-3.f));
+        if (shape == 0) return ph * ph;
         return std::pow ((1.f - std::exp (-3.1f * ph)) / (1.f - std::exp (-3.1f)), 2.45f);
     }
     // level of one note after the pedal: its swell over `attack`, and SUSTAIN slowing the decay (as the engine:
@@ -1077,7 +1086,8 @@ struct SignalWindow : juce::Component, juce::Timer
         {
             const float e = P ("even");
             const float amp[2] = { 0.42f, 1.f }, on[2] = { 0.f, 1.7f };
-            const Plot pl = timeGrid (g, b);
+            const float pkE = peakOf ([&] (float t) { float m = 0.f; for (int i = 0; i < 2; ++i) m = juce::jmax (m, juce::jmax (amp[i] * natural (t - on[i]), (amp[i] + (0.72f - amp[i]) * e) * swelled (t - on[i], A))); return m; }, kT);
+            const Plot pl = timeGrid (g, b, kT, 0.95f / juce::jmax (1.f, pkE));
             for (int i = 0; i < 2; ++i)
             {
                 const float o = on[i], av = amp[i], lev = av + (0.72f - av) * e;
@@ -1088,8 +1098,11 @@ struct SignalWindow : juce::Component, juce::Timer
             return e > 0.01f ? "soft and hard picks come out closer in level" : "off: each note keeps its own level";
         }
 
-        // the plain swell against the guitar (no zoom: the level the swell loses is the point), plus what the knob adds
-        const Plot pl = timeGrid (g, b);
+        // the plain swell against the guitar, plus what the knob adds; scaled so the tallest curve fits (the POG2 curve's
+        // own make-up gain lifts a long swell above the guitar's pick, as the pedal measured)
+        const float volG = id == "vol" ? juce::jmax (1.f, juce::Decibels::decibelsToGain (P ("vol"))) : 1.f;
+        const float pkAll = peakOf ([&] (float t) { return juce::jmax (natural (t), volG * swelled (t, A)); }, kT);
+        const Plot pl = timeGrid (g, b, kT, 0.95f / juce::jmax (1.f, pkAll));
         dashed (g, curve (pl, 0.f, [] (float t) { return natural (t); }), guitarC.withAlpha (0.6f));
         tag (g, "GUITAR", pl.x (0.f) + 18.f, pl.y (0.9f), guitarC.withAlpha (0.85f));
         const float vol = id == "vol" ? juce::Decibels::decibelsToGain (P ("vol")) : 1.f;
@@ -1500,7 +1513,13 @@ struct SignalWindow : juce::Component, juce::Timer
         const Colour amberC (cAmber), pale (cPale), teal (0xff7fd1bd), rust (0xffff8a6a), blue (0xff8fb8e8), violet (0xffc4a6ec),
                      sage (0xffb5d38c), cream (0xffd8c3a2);
 
-        g.beginTransparencyLayer (0.3f);   // ---- background: the notes, their pitch, the filter veil
+        const bool showNotes = proc.uiWindowNotes;
+        const bool filterOn = on ("filterOn");
+        const bool fbOn = feedbackOn(), amp = on ("fbAmp") && P ("fbMode") < 0.5f;
+        const bool layerOn = on ("voiceOn") && on ("voiceMixOn") && P ("voiceMix") > 0.f, spaceOn = on ("smearOn");
+        if (showNotes)
+        {
+        g.beginTransparencyLayer (0.35f);   // ---- NOTES (optional, behind): the tracked notes over time, the filter veil
         // the open E strings as a faint grid
         g.setFont (monoFont (9.5f));
         for (int m : { 40, 52, 64, 76 })
@@ -1511,7 +1530,6 @@ struct SignalWindow : juce::Component, juce::Timer
         }
 
         // FILTER: a soft veil over everything above the cutoff (no line); the notes under it dim (below)
-        const bool filterOn = on ("filterOn");
         auto filterAtt = [] (float hz, float cut) { if (cut <= 0.f) return 1.f; const float r = 2.f * hz / cut; return 1.f / std::sqrt (1.f + r * r * r * r); };
         if (filterOn)
         {
@@ -1530,10 +1548,8 @@ struct SignalWindow : juce::Component, juce::Timer
         }
 
         // the notes
-        const bool fbOn = feedbackOn(), amp = on ("fbAmp") && P ("fbMode") < 0.5f;
         float rA, rB, wA, wB; fbLadder (rA, rB, wA, wB);
         const float take = (fbOn && amp) ? 0.65f * ((rA == 1.f ? 0.f : wA) + wB) : 0.f;
-        const bool layerOn = on ("voiceOn") && on ("voiceMixOn") && P ("voiceMix") > 0.f, spaceOn = on ("smearOn");
         const float tailCols = (0.15f + 2.2f * P ("smearSize")) / kColSec;   // a longer SIZE, a longer tail
         juce::Path body[12], glow, core, over;
         auto quad = [] (juce::Path& p, float xa, float ya, float ta, float xb, float yb, float tb)
@@ -1607,55 +1623,109 @@ struct SignalWindow : juce::Component, juce::Timer
             }
         }
 
-        g.endTransparencyLayer();   // ---- foreground
-
-        if (filterOn)   // where the filter is now, on the pitch axis at the right edge
-        {
-            const float cNow = cutoffAt (noteAge), yc = yOfHz (cNow, lane);
-            juce::Path tri; tri.addTriangle (lane.getRight(), yc - 4.f, lane.getRight(), yc + 4.f, lane.getRight() - 6.f, yc);
-            g.setColour (teal.withAlpha (0.8f)); g.fillPath (tri);
-            tag (g, tidyValue (String (cNow), "Hz").toUpperCase(), lane.getRight() - 8.f, juce::jmax (yc - 8.f, lane.getY() + 9.f), teal.withAlpha (0.8f), juce::Justification::centredRight);
+        // "now" on the notes' own time axis
+        for (float y = lane.getY() - 4.f; y < lane.getBottom(); y += 5.f) { g.setColour (cTextHi.withAlpha (0x40 / 255.f)); g.fillRect (nowX, y, 1.f, 2.5f); }
+        g.endTransparencyLayer();
         }
+        juce::ignoreUnused (env, fut);
 
-        // "now"
-        for (float y = lane.getY() - 4.f; y < env.getBottom(); y += 5.f) { g.setColour (cTextHi.withAlpha (0x40 / 255.f)); g.fillRect (nowX, y, 1.f, 2.5f); }
-
-        // the output level against the guitar's own; the latest note's swell continues dashed past "now"
-        auto yDb = [&] (float db) { return env.getBottom() - juce::jlimit (0.f, 1.f, (db + 60.f) / 54.f) * env.getHeight(); };
-        g.setColour (cGlow.withAlpha (0x1a / 255.f)); g.fillRect (env.getX(), env.getBottom(), env.getWidth(), 1.f);
-        juce::Path outP, outL, inP;
-        for (int age = kCols - 1; age >= 0; --age)
+        // ---- the swell of the current settings (time since the pick), a glowing dot for every sounding note where it is
+        const float A = juce::jmax (0.f, P ("attack") * 0.001f);
+        const float Tw = juce::jlimit (1.5f, 9.f, A * 1.4f + 1.2f);   // the window follows ATTACK, so a long swell fits
+        const Rect pa (lane.getX() + 4.f, lane.getY() + 12.f, lane.getWidth() - 8.f, lane.getHeight() - 16.f);
+        auto tx = [&] (float t) { return pa.getX() + pa.getWidth() * juce::jlimit (0.f, 1.f, t / Tw); };
+        float peak = 1.0e-6f;
+        for (int k = 0; k <= 160; ++k) { const float t = Tw * (float) k / 160.f; peak = juce::jmax (peak, juce::jmax (swelled (t, A), natural (t))); }
+        auto ay = [&] (float a) { return pa.getBottom() - pa.getHeight() * juce::jlimit (0.f, 1.f, a / peak); };
+        // seconds
+        g.setFont (monoFont (9.f));
+        const float stepS = Tw > 5.f ? 2.f : 1.f;
+        for (float sec = stepS; sec < Tw - 0.2f; sec += stepS)
         {
-            const Col& c = col (age);
-            if (age == kCols - 1) { outP.startNewSubPath (X (age), env.getBottom()); inP.startNewSubPath (X (age), yDb (c.inDb)); outL.startNewSubPath (X (age), yDb (c.outDb)); }
-            else { inP.lineTo (X (age), yDb (c.inDb)); outL.lineTo (X (age), yDb (c.outDb)); }
-            outP.lineTo (X (age), yDb (c.outDb));
+            g.setColour (cGlow.withAlpha (0.1f)); g.fillRect (tx (sec), pa.getY(), 1.f, pa.getHeight());
+            g.setColour (cText.withAlpha (0.45f)); g.drawText (String ((int) sec) + " S", Rect (tx (sec) + 2.f, pa.getBottom() - 10.f, 30.f, 10.f), juce::Justification::centredLeft);
         }
-        outP.lineTo (nowX, env.getBottom()); outP.closeSubPath();
-        g.setGradientFill (juce::ColourGradient (amberC.withAlpha (0.5f), 0.f, env.getY(), amberC.withAlpha (0.04f), 0.f, env.getBottom(), false));
-        g.fillPath (outP);
-        g.setColour (cGlow.withAlpha (0.35f)); g.strokePath (outL, juce::PathStrokeType (4.f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-        g.setColour (amberC); g.strokePath (outL, juce::PathStrokeType (1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-        dashed (g, inP, cream.withAlpha (0.65f), 1.2f);
+        g.setColour (cGlow.withAlpha (0.18f)); g.fillRect (pa.getX(), pa.getBottom(), pa.getWidth(), 1.f);
+        // the guitar alone (dashed) and through the pedal (filled, bright edge)
+        juce::Path wetP, dryP;
+        for (int k = 0; k <= 240; ++k)
         {
-            // the swell ahead: the latest note's, or a preview of the next one (a pick at -12 dB) so ATTACK always shows
-            const bool live = noteAge >= 0.f && noteAge < kT && inPeakNote > 1.0e-5f;
-            const float A = live && noteAttack > 0.f ? noteAttack : P ("attack") * 0.001f, t0 = live ? noteAge : 0.f;
-            const float pk = live ? inPeakNote : 0.25f;
-            juce::Path pr;
-            for (int k = 0; k <= fut; ++k)
+            const float t = Tw * (float) k / 240.f;
+            if (k == 0) { wetP.startNewSubPath (tx (t), ay (swelled (t, A))); dryP.startNewSubPath (tx (t), ay (natural (t))); }
+            else { wetP.lineTo (tx (t), ay (swelled (t, A))); dryP.lineTo (tx (t), ay (natural (t))); }
+        }
+        dashed (g, dryP, cream.withAlpha (0.45f), 1.f);
+        juce::Path fillP (wetP); fillP.lineTo (pa.getRight(), pa.getBottom()); fillP.lineTo (pa.getX(), pa.getBottom()); fillP.closeSubPath();
+        g.setGradientFill (juce::ColourGradient (amberC.withAlpha (0.42f), 0.f, pa.getY(), amberC.withAlpha (0.03f), 0.f, pa.getBottom(), false));
+        g.fillPath (fillP);
+        g.setColour (cGlow.withAlpha (0.3f)); g.strokePath (wetP, juce::PathStrokeType (4.f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        g.setColour (amberC); g.strokePath (wetP, juce::PathStrokeType (1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        if (A > 0.002f && A < Tw)   // where the swell is done
+        {
+            juce::Path at; at.startNewSubPath (tx (A), pa.getY() + 2.f); at.lineTo (tx (A), pa.getBottom());
+            dashed (g, at, cTextHi.withAlpha (0.3f), 1.f);
+            tag (g, "ATTACK", tx (A) + 3.f, pa.getBottom() - 20.f, cTextHi.withAlpha (0.55f));
+        }
+        // the filter's sweep over the same time, on its own frequency scale (80 Hz .. 12 kHz, bottom to top)
+        auto fy = [&] (float hz) { return pa.getBottom() - pa.getHeight() * juce::jlimit (0.f, 1.f, std::log (juce::jmax (hz, 80.f) / 80.f) / std::log (150.f)); };
+        auto cutAt = [&] (float t)
+        {
+            const float fc = P ("freq"), mod = on ("modOn") ? P ("mod") : 0.f, oct = std::abs (mod) < 0.03f ? 0.f : std::abs (mod) * 6.f;
+            const float ph = A < 0.002f ? 1.f : juce::jlimit (0.f, 1.f, t / A);
+            return juce::jmax (40.f, fc / std::pow (2.f, oct * (mod > 0.f ? 1.f - ph : ph)));
+        };
+        if (filterOn)
+        {
+            juce::Path fp;
+            for (int k = 0; k <= 160; ++k) { const float t = Tw * (float) k / 160.f; if (k == 0) fp.startNewSubPath (tx (t), fy (cutAt (t))); else fp.lineTo (tx (t), fy (cutAt (t))); }
+            g.setColour (teal.withAlpha (0.25f)); g.strokePath (fp, juce::PathStrokeType (3.f));
+            g.setColour (teal.withAlpha (0.85f)); g.strokePath (fp, juce::PathStrokeType (1.2f));
+            const float c0 = cutAt (0.f), c1 = cutAt (Tw);
+            tag (g, "FILTER " + tidyValue (String (c0), "Hz").toUpperCase(), pa.getX() + 2.f, juce::jlimit (pa.getY() + 8.f, pa.getBottom() - 14.f, fy (c0) - 7.f), teal.withAlpha (0.85f));
+            if (std::abs (c1 - c0) > 1.f)
+                tag (g, tidyValue (String (c1), "Hz").toUpperCase(), pa.getRight() - 2.f, juce::jlimit (pa.getY() + 8.f, pa.getBottom() - 14.f, fy (c1) - 7.f), teal.withAlpha (0.85f), juce::Justification::centredRight);
+        }
+        // every sounding note: a glowing dot at its time since the pick, named; it fades once past the picture
+        {
+            struct Dot { float x, y, a, midi; };
+            std::vector<Dot> dots;
+            for (int j = 0; j < liveN; ++j)
             {
-                const float t = t0 + (float) k * kColSec, y = yDb (20.f * std::log10 (pk * swelled (t, A) + 1.0e-9f));
-                if (k == 0) pr.startNewSubPath (nowX, y); else pr.lineTo (nowX + (float) k * dx, y);
+                const float t = liveT[j], fade = t <= Tw ? 1.f : 0.6f;   // a note held past the picture waits at its edge
+                if (fade <= 0.f) continue;
+                const float tc = juce::jmin (t, Tw);
+                dots.push_back ({ tx (tc), ay (swelled (tc, A)), fade * juce::jlimit (0.35f, 1.f, liveLvl[j] / (lvlRef + 1.0e-9f) * 1.6f), liveMidi[j] });
+                if (filterOn)   // the same note on the filter's sweep
+                {
+                    const float fx = tx (tc), fyy = fy (cutAt (tc));
+                    g.setColour (teal.withAlpha (0.35f * fade)); g.fillEllipse (fx - 5.f, fyy - 5.f, 10.f, 10.f);
+                    g.setColour (teal.withAlpha (fade)); g.fillEllipse (fx - 2.2f, fyy - 2.2f, 4.4f, 4.4f);
+                }
             }
-            if (! live) { g.setColour (cGlow.withAlpha (0.25f)); g.strokePath (pr, juce::PathStrokeType (4.f)); }
-            dashed (g, pr, amberC.withAlpha (live ? 0.9f : 0.6f), 2.f);
-            if (! live) tag (g, "NEXT NOTE", nowX + 6.f, env.getBottom() - 8.f, amberC.withAlpha (0.55f));
+            std::sort (dots.begin(), dots.end(), [] (const Dot& a, const Dot& b) { return a.x < b.x; });
+            g.setFont (monoFont (10.f));
+            float lastX = -100.f, lastY = -100.f; int stack = 0;
+            for (auto& d : dots)
+            {
+                g.setGradientFill (juce::ColourGradient (pale.withAlpha (0.55f * d.a), d.x, d.y, cGlow.withAlpha (0.f), d.x + 11.f, d.y, true));
+                g.fillEllipse (d.x - 11.f, d.y - 11.f, 22.f, 22.f);
+                g.setColour (pale.withAlpha (d.a)); g.fillEllipse (d.x - 3.f, d.y - 3.f, 6.f, 6.f);
+                stack = (std::abs (d.x - lastX) < 26.f && std::abs (d.y - lastY) < 14.f) ? stack + 1 : 0;   // names of notes side by side
+                lastX = d.x; lastY = d.y;
+                const float ly2 = juce::jmax (pa.getY() + 6.f, d.y - 12.f - 10.f * (float) stack);
+                g.setColour (pale.withAlpha (0.9f * d.a));
+                g.drawText (noteName (d.midi), Rect (d.x - 20.f, ly2 - 6.f, 40.f, 11.f), juce::Justification::centred);
+            }
+            if (dots.empty()) tag (g, "PLAY A NOTE", pa.getRight() - 2.f, pa.getBottom() - 30.f, cText.withAlpha (0.45f), juce::Justification::centredRight);
         }
-        for (int age = 0; age < kCols; ++age)
-            if (col (age).pick) { g.setColour (amberC.withAlpha (0.8f)); g.fillRect (X (age), env.getBottom() - 4.f, 1.f, 5.f); }
-        tag (g, "OUT", env.getX() + 2.f, env.getY() + 4.f, amberC.withAlpha (0.9f));
-        tag (g, "GUITAR", env.getX() + 28.f, env.getY() + 4.f, cream.withAlpha (0.75f));
+        // the NOTES switch: the tracked notes over time, faint underneath
+        {
+            const auto r = notesRect();
+            g.setColour (cText.withAlpha (showNotes ? 0.9f : 0.4f)); g.drawRoundedRectangle (r, 5.f, 1.f);
+            if (showNotes) { g.setColour (cGlow.withAlpha (0.25f)); g.fillRoundedRectangle (r, 5.f); }
+            g.setFont (uiFont (8.5f, true, 0.12f)); g.setColour (cTextHi.withAlpha (showNotes ? 1.f : 0.55f));
+            g.drawText ("NOTES", r, juce::Justification::centred);
+        }
 
         // what is shaping the sound: lit when in use
         struct Item { const char* s; Colour c; bool lit; };
@@ -1757,6 +1827,8 @@ struct SignalWindow : juce::Component, juce::Timer
     std::array<Col, kCols> cols {};
     int head = 0, idle = 0, quiet = 0, roTicks = 0, linger = 0, peakHoldT = 0, pickCols = 99;
     uint32_t lastFrame = 0, lastSeq = 0;
+    int liveN = 0;
+    float liveMidi[kMaxN] {}, liveLvl[kMaxN] {}, liveT[kMaxN] {};
     float viewA = 0.f, noteAge = -1.f, noteAttack = 0.f, paramSum = 0.f, lvlRef = 1.0e-6f,
           meterDb = -100.f, peakDb = -100.f, inPeakNote = 0.f;
     bool lastByp = false, hadReadout = false, focusHeld = false;
@@ -2059,66 +2131,68 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
                 chip (Chip::toggle, "fbOneWins", "ONE WINS", kMods[1].ac, "ONE WINS: in a chord the loudest note takes most of the feedback, as in a real amp.", g),
                 chip (Chip::menu, "fbMode", "", kMods[1].ac, "Bloom: the feedback grows on held notes. Immediate: an overtone from the pick, like an octave pedal.", g) },
               rowX (1), rowY (1, 0));
-        // MOTION, across the full width: each knob in its own box with its own settings under it
+        // MOTION: four knobs, their settings in two rows (vibrato | tremolo and spread)
         {
-            const auto r = moduleRect (2);
             const Colour ac = kMods[2].ac;
-            const char* ids[4] = { "vibDepth", "tremolo", "spread", "detuneMix" }; const char* names[4] = { "VIBRATO", "TREMOLO", "SPREAD", "DETUNE" };
-            const float colW = (r.getWidth() - 28.f) / 4.f;
-            for (int c = 0; c < 4; ++c)
+            knobRow (2, { { "vibDepth", "VIBRATO" }, { "tremolo", "TREMOLO" }, { "spread", "SPREAD" }, { "detuneMix", "DETUNE" } });
+            auto* vt = chip (Chip::custom, "", "VIB ON", ac, "What the vibrato moves (voice, guitar or both), and HUMAN: it starts shallow and slow, then settles.", g);
+            vt->textFn = [this] { return shortChoice (proc.apvts.getParameter ("vibTarget")->getCurrentValueAsText()) + (getParam ("vibHuman") > 0.5f ? " HUMAN" : ""); };
+            vt->setSize (92, 22);
+            vt->onHover = [this] (bool isOn) { window.setFocus ("vibDepth", isOn); };
+            vt->onPress = [this, vt]
             {
-                const float cx = r.getX() + 14.f + colW * ((float) c + 0.5f);
-                subBoxes.push_back ({ Rect (cx - colW * 0.5f + 4.f, r.getY() + 38.f, colW - 8.f, r.getHeight() - 40.f), ac });
-                knob (ids[c], names[c], 2, cx, r.getY() + 74.f, ac, g);
-                label (names[c], { cx - 45, r.getY() + 105.f, 90, 13 }, 11.f, col::chipText, juce::Justification::centred, true, 0.14f);
-                std::vector<juce::Component*> stack;
-                if (c == 0)
+                juce::PopupMenu m;
+                m.addSectionHeader ("Vibrato on");
+                const auto vn = proc.apvts.getParameter ("vibTarget")->getAllValueStrings();
+                for (int i = 0; i < vn.size(); ++i) m.addItem (10 + i, vn[i], true, juce::roundToInt (getParam ("vibTarget")) == i);
+                m.addSeparator();
+                m.addItem (1, "Human feel", true, getParam ("vibHuman") > 0.5f);
+                m.setLookAndFeel (&look);
+                m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (vt), [this, vt] (int res)
                 {
-                    // what the vibrato moves, and its feel, in one chip
-                    auto* vt = chip (Chip::custom, "", "VIB ON", ac, "What the vibrato moves (voice, guitar or both), and HUMAN: it starts shallow and slow, then settles.", g);
-                    vt->textFn = [this] { return shortChoice (proc.apvts.getParameter ("vibTarget")->getCurrentValueAsText()) + (getParam ("vibHuman") > 0.5f ? " HUMAN" : ""); };
-                    vt->setSize (112, 22);
-                    vt->onHover = [this] (bool isOn) { window.setFocus ("vibDepth", isOn); };
-                    vt->onPress = [this, vt]
-                    {
-                        juce::PopupMenu m;
-                        m.addSectionHeader ("Vibrato on");
-                        const auto vn = proc.apvts.getParameter ("vibTarget")->getAllValueStrings();
-                        for (int i = 0; i < vn.size(); ++i) m.addItem (10 + i, vn[i], true, juce::roundToInt (getParam ("vibTarget")) == i);
-                        m.addSeparator();
-                        m.addItem (1, "Human feel", true, getParam ("vibHuman") > 0.5f);
-                        m.setLookAndFeel (&look);
-                        m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (vt), [this, vt] (int res)
-                        {
-                            if (res == 1) setParam ("vibHuman", getParam ("vibHuman") > 0.5f ? 0.f : 1.f);
-                            else if (res >= 10) setParam ("vibTarget", (float) (res - 10));
-                            vt->repaint();
-                        });
-                    };
-                    stack = { valueChip ("vibRate", "RATE", 0, ac, g), valueChip ("vibDelay", "DELAY", 0, ac, g), vt };
-                }
-                else if (c == 1) stack = { valueChip ("tremRate", "RATE", 0, ac, g), chip (Chip::menu, "tremShape", "", ac, "Tremolo shape.", g) };
-                else if (c == 2) stack = { chip (Chip::menu, "spreadMode", "", ac, "How SPREAD places the notes.", g) };
-                else stack = {};
-                float y = r.getY() + 123.f;
-                for (auto* comp : stack) { comp->setTopLeftPosition (juce::roundToInt (cx - (float) comp->getWidth() * 0.5f), juce::roundToInt (y)); y += 25.f; }
-            }
+                    if (res == 1) setParam ("vibHuman", getParam ("vibHuman") > 0.5f ? 0.f : 1.f);
+                    else if (res >= 10) setParam ("vibTarget", (float) (res - 10));
+                    vt->repaint();
+                });
+            };
+            flow ({ valueChip ("vibRate", "VIB", 0, ac, g), valueChip ("vibDelay", "DELAY", 0, ac, g), vt }, rowX (2), rowY (2, 0));
+            flow ({ valueChip ("tremRate", "TREM", 0, ac, g), chip (Chip::menu, "tremShape", "", ac, "Tremolo shape.", g),
+                    chip (Chip::menu, "spreadMode", "", ac, "How SPREAD places the notes.", g) }, rowX (2), rowY (2, 1));
         }
-        // LAYER
-        knobRow (3, { { "voiceMix", "MIX" }, { "voiceTone", "TONE" }, { "voiceGlide", "GLIDE" }, { "voiceCharacter", "CHARACTER" } });
+        // LAYER, across the full width: the voice's knobs and play options on the left, all nine waves on the right
         {
-            auto* waves = segs.add (new Seg (proc, "voiceWave", { { "SAW", 1 }, { "BOW", 8 }, { "PAD", 7 }, { "GLASS", 5 } }, kMods[3].ac));
-            waves->setTooltip ("The voice's sound: saw (strings), bow, bowed pad, glass.");
-            waves->setSize (waves->idealWidth(), 22); addAndMakeVisible (waves); g.add (waves);
-            auto* more = chip (Chip::menu, "voiceWave", "", kMods[3].ac, "All nine waves.", g);
-            more->textFn = [] { return String ("MORE"); };
-            more->setSize (60, 22);
-            flow ({ waves, more }, rowX (3), rowY (3, 0));
-            auto* oct = segs.add (new Seg (proc, "voiceOct", { { "-1", 0 }, { "0", 1 }, { "+1", 2 } }, kMods[3].ac));
+            const auto r = moduleRect (3);
+            const Colour ac = kMods[3].ac;
+            const char* ids[4] = { "voiceMix", "voiceTone", "voiceGlide", "voiceCharacter" }; const char* names[4] = { "MIX", "TONE", "GLIDE", "CHARACTER" };
+            for (int i = 0; i < 4; ++i)
+            {
+                const float cx = r.getX() + 14.f + 37.f + 76.f * (float) i;
+                knob (ids[i], names[i], 2, cx, r.getY() + 71, ac, g);
+                label (names[i], { cx - 45, r.getY() + 101, 90, 13 }, 11.f, col::chipText, juce::Justification::centred, true, 0.14f);
+            }
+            auto* oct = segs.add (new Seg (proc, "voiceOct", { { "-1", 0 }, { "0", 1 }, { "+1", 2 } }, ac));
             oct->setTooltip ("The voice's octave.");
             oct->setSize (oct->idealWidth(), 22); addAndMakeVisible (oct); g.add (oct);
-            flow ({ oct, chip (Chip::toggle, "voiceMono", "MONO", kMods[3].ac, "Mono: only the newest note keeps its voice (for lead lines).", g),
-                    valueChip ("voiceUnison", "UNISON", 104, kMods[3].ac, g) }, rowX (3), rowY (3, 1));
+            flow ({ oct, chip (Chip::toggle, "voiceMono", "MONO", ac, "Mono: only the newest note keeps its voice (for lead lines).", g),
+                    valueChip ("voiceUnison", "UNISON", 104, ac, g) }, rowX (3) + 10.f, rowY (3, 0) + 12.f);
+            // WAVE: all nine, three rows
+            const float wx = r.getX() + 336.f, ww = r.getRight() - 14.f - wx;
+            subBoxes.push_back ({ Rect (wx, r.getY() + 40.f, ww, r.getHeight() - 52.f), ac });
+            label ("WAVE", { wx, r.getY() + 46.f, ww, 13.f }, 11.f, col::chipText, juce::Justification::centred, true, 0.2f);
+            const std::vector<std::vector<std::pair<String, int>>> rows = { { { "SUPERSAW", 0 }, { "SAW", 1 }, { "PWM", 2 } },
+                                                                             { { "SQUARE", 3 }, { "ORGAN", 4 }, { "GLASS", 5 } },
+                                                                             { { "REED", 6 }, { "PAD", 7 }, { "BOW", 8 } } };
+            const char* tips[3] = { "Supersaw (a wide unison of saws), saw (strings), PWM (a moving pulse).",
+                                    "Square (hollow), organ, glass (bell-like).", "Reed, bowed pad (VG-8 like), bow (a bowed string)." };
+            float y = r.getY() + 66.f;
+            for (int k = 0; k < 3; ++k)
+            {
+                auto* w = segs.add (new Seg (proc, "voiceWave", rows[(size_t) k], ac));
+                w->setTooltip (tips[k]);
+                w->setSize (w->idealWidth(), 22); addAndMakeVisible (w); g.add (w);
+                w->setTopLeftPosition (juce::roundToInt (wx + (ww - (float) w->getWidth()) * 0.5f), juce::roundToInt (y));
+                y += 30.f;
+            }
         }
         // SPACE
         {
@@ -2383,6 +2457,7 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         {
             Graphics::ScopedSaveState ss (g);
             g.reduceClipRegion (pedal);
+            g.setOpacity (1.f);
             g.drawImage (sk.plateImg(), pr, juce::RectanglePlacement::stretchToFit);
         }
         for (auto& gr : pedalGroups)
@@ -2397,14 +2472,15 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         {
             const auto logo = sk.logoImg();   // visible part: x 8..1006, y 8..359 of 1012 x 440
             const float lw = 300.f, lh = lw * 351.f / 998.f, lcy = pr.getY() + (412.f + 552.f) * 0.5f, ly = lcy - lh * 0.5f;
-            // 70s racing stripes in the skin's three colours, frame to frame, running under the lettering through the
-            // lower part of the oval (text: 24..70 % of the logo's height, oval to 100 %); the plate's wear shows through
-            const float sy = ly + lh * 0.855f - 11.f;
+            // 70s racing stripes in the skin's three colours, frame to frame through the footswitch row, faint so the
+            // plate's wear shows through (the footswitch and its LED sit on them)
+            const float sy = pr.getY() + 584.f - 11.f;
             for (int k = 0; k < 3; ++k)
             {
                 const Rect st (pr.getX() + 24.f, sy + (float) k * 8.5f, kPedalW - 48.f, 5.5f);
-                g.setColour (sk.rings[k].withAlpha (0.88f)); g.fillRect (st);
+                g.setColour (sk.rings[k].withAlpha (0.42f)); g.fillRect (st);
             }
+            g.setOpacity (1.f);   // drawImage uses the current colour's alpha (the faint stripes' would fade the logo)
             g.drawImage (logo, juce::roundToInt (pr.getCentreX() - lw * 0.5f), juce::roundToInt (ly), juce::roundToInt (lw), juce::roundToInt (lh),
                          8, 8, 998, 351);
         }

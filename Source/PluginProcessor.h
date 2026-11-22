@@ -106,7 +106,8 @@ public:
     bool isLearning (const juce::String& paramId) const;
     void stopLearning() { ccLearn = -1; }
     float uiScale = 1.f;
-    int uiSkin = 0;                         // 0 Sunburst, 1 Lagoon, 2 Midnight                    // editor size (0.75 .. 2)
+    int uiSkin = 0;
+    bool uiWindowNotes = false;             // the signal window shows the tracked notes underneath                         // 0 Sunburst, 1 Lagoon, 2 Midnight                    // editor size (0.75 .. 2)
     std::array<bool, 5> uiFold { false, false, false, false, false };   // BLOOM, MOTION, VOICE, SMEAR, DRIVE
     std::array<int, 3>  uiOpenRow { -1, -1, -1 };
 

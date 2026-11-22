@@ -184,3 +184,12 @@ rings (outer = lightest). Switch: SKIN chip in the top bar or gear > Skin; saved
   level (filled, bright edge) against the guitar (dashed), the latest note's swell projected past "now", or with nothing
   playing a "NEXT NOTE" preview (a -12 dB pick through the current settings) so ATTACK always shows. Behind, in a 30 %
   transparency layer: the note ribbons, the pitch grid and the filter veil; the filter's Hz marker stays bright.
+- Window live view, round 2 (owner: gen 1's per-note view was more informative): the swell of the current settings over
+  time since the pick (window = 1.4 x ATTACK + 1.2 s, 1.5..9 s), filled, the guitar dashed, an ATTACK marker; the filter's
+  sweep as a teal curve on its own 80 Hz..12 kHz scale; one glowing dot per sounding note (`liveT` = VoiceNote.timeSec)
+  on both, named; a held note past the picture waits at its edge. NOTES switch (top-left of the glass, `uiWindowNotes`,
+  saved) overlays the tracked-note ribbons faint underneath. `swellGain` takes the shape (POG2 was drawn as Bowed).
+- Knob pictures scale to their tallest curve (the POG2 make-up gain lifted long swells off the top).
+- JUCE `drawImage` uses the current colour's alpha: set `g.setOpacity (1.f)` before drawing the plate / logo.
+- Stripes moved to the footswitch row, 42 % alpha. Panel: FILTER | FEEDBACK, MOTION | SPACE, LAYER full width (knobs +
+  octave/MONO/UNISON left, all nine waves in a WAVE box right; no MORE menu).
