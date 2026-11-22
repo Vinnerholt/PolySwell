@@ -670,6 +670,7 @@ struct FootSwitch : juce::Component, juce::SettableTooltipClient
         juce::Path disc; disc.addEllipse (c - R, cy - R + oy, 2 * R, 2 * R);
         juce::DropShadow (juce::Colours::black.withAlpha (0.55f), down ? 4 : 8, { 0, down ? 2 : 4 }).drawForPath (g, disc);
         g.setImageResamplingQuality (Graphics::highResamplingQuality);
+        g.setOpacity (1.f);   // drawImage uses the current colour's alpha (the shadow's would make it see-through)
         g.drawImage (img, Rect (c - R, cy - R + oy, 2 * R, 2 * R));
     }
     void mouseDown (const juce::MouseEvent& e) override { if (e.mods.isPopupMenu()) { if (onMenu) onMenu(); return; } down = true; repaint(); if (onDown) onDown(); }
@@ -878,6 +879,14 @@ struct SignalWindow : juce::Component, juce::Timer
         lastSeq = note.seq;
         noteAge = (note.seq != 0 && live) ? note.ageSec : -1.f;
         noteAttack = note.attackSec;
+        if (live && note.seq != 0)
+        {
+            const double now = juce::Time::getMillisecondCounterHiRes() * 0.001;
+            const float knobA = juce::jmax (0.01f, P ("attack") * 0.001f);
+            const Pick pk { note.seq, now - note.ageSec, note.attackSec / knobA, note.strength, note.pickStrength };
+            if (picks.empty() || picks.back().seq != note.seq) { picks.push_back (pk); if (picks.size() > 4) picks.erase (picks.begin()); }
+            else if (note.ageSec < 0.2f) picks.back() = pk;   // the engine refines a pick while its strum window is open
+        }
         // the guitar's level at the pick (loudest of the first 4 frames): the projected swell starts from it
         const float inLin = std::sqrt ((float) ei);
         if (c.pick) { inPeakNote = inLin; pickCols = 0; }
@@ -1629,95 +1638,150 @@ struct SignalWindow : juce::Component, juce::Timer
         }
         juce::ignoreUnused (env, fut);
 
-        // ---- the swell of the current settings (time since the pick), a glowing dot for every sounding note where it is
-        const float A = juce::jmax (0.f, P ("attack") * 0.001f);
-        const float Tw = juce::jlimit (1.5f, 9.f, A * 1.4f + 1.2f);   // the window follows ATTACK, so a long swell fits
-        const Rect pa (lane.getX() + 4.f, lane.getY() + 12.f, lane.getWidth() - 8.f, lane.getHeight() - 16.f);
+        // ---- LEVEL (left): each pick's own swell - its attack after FEEL and PACE, its level after EVEN - with a dot
+        // travelling along the latest; the picks before it stay as faint ghosts. TONE (right): the filter on the latest
+        // note right now - MOD sweeping it, DYN moving it by the pick, RES as the peak.
+        const double nowS = juce::Time::getMillisecondCounterHiRes() * 0.001;
+        const float A0 = juce::jmax (0.f, P ("attack") * 0.001f);
+        const float Tw = juce::jlimit (1.2f, 9.f, A0 * 1.4f + 1.f);
+        const float split = std::round (b.getWidth() * 0.63f);
+        const Rect pa (12.f, 24.f, split - 18.f, b.getHeight() - 46.f);                       // LEVEL
+        const Rect fr (split + 8.f, 24.f, b.getWidth() - split - 16.f, b.getHeight() - 46.f);  // TONE
+        g.setColour (cGlow.withAlpha (0.12f)); g.fillRect (split, pa.getY() - 8.f, 1.f, pa.getHeight() + 12.f);
         auto tx = [&] (float t) { return pa.getX() + pa.getWidth() * juce::jlimit (0.f, 1.f, t / Tw); };
-        float peak = 1.0e-6f;
-        for (int k = 0; k <= 160; ++k) { const float t = Tw * (float) k / 160.f; peak = juce::jmax (peak, juce::jmax (swelled (t, A), natural (t))); }
-        auto ay = [&] (float a) { return pa.getBottom() - pa.getHeight() * juce::jlimit (0.f, 1.f, a / peak); };
-        // seconds
-        g.setFont (monoFont (9.f));
-        const float stepS = Tw > 5.f ? 2.f : 1.f;
-        for (float sec = stepS; sec < Tw - 0.2f; sec += stepS)
+        const float even = P ("even"), touch = P ("touch");
+        auto ampOf = [&] (float strength) { return std::pow (10.f, strength * 12.f * (1.f - even) / 40.f); };   // half the dB, so soft picks stay readable
+        float pkRef = 1.0e-6f;
+        for (int k = 0; k <= 120; ++k) pkRef = juce::jmax (pkRef, swelled (Tw * (float) k / 120.f, A0));
+        const float full = pkRef / 0.62f;   // an average pick peaks at 62 % of the height; harder ones go higher
+        auto ay = [&] (float a) { return pa.getBottom() - pa.getHeight() * juce::jlimit (0.f, 1.f, a / full); };
+        auto curveOf = [&] (float amp, float att, float upTo)
         {
-            g.setColour (cGlow.withAlpha (0.1f)); g.fillRect (tx (sec), pa.getY(), 1.f, pa.getHeight());
-            g.setColour (cText.withAlpha (0.45f)); g.drawText (String ((int) sec) + " S", Rect (tx (sec) + 2.f, pa.getBottom() - 10.f, 30.f, 10.f), juce::Justification::centredLeft);
-        }
-        g.setColour (cGlow.withAlpha (0.18f)); g.fillRect (pa.getX(), pa.getBottom(), pa.getWidth(), 1.f);
-        // the guitar alone (dashed) and through the pedal (filled, bright edge)
-        juce::Path wetP, dryP;
-        for (int k = 0; k <= 240; ++k)
-        {
-            const float t = Tw * (float) k / 240.f;
-            if (k == 0) { wetP.startNewSubPath (tx (t), ay (swelled (t, A))); dryP.startNewSubPath (tx (t), ay (natural (t))); }
-            else { wetP.lineTo (tx (t), ay (swelled (t, A))); dryP.lineTo (tx (t), ay (natural (t))); }
-        }
-        dashed (g, dryP, cream.withAlpha (0.45f), 1.f);
-        juce::Path fillP (wetP); fillP.lineTo (pa.getRight(), pa.getBottom()); fillP.lineTo (pa.getX(), pa.getBottom()); fillP.closeSubPath();
-        g.setGradientFill (juce::ColourGradient (amberC.withAlpha (0.42f), 0.f, pa.getY(), amberC.withAlpha (0.03f), 0.f, pa.getBottom(), false));
-        g.fillPath (fillP);
-        g.setColour (cGlow.withAlpha (0.3f)); g.strokePath (wetP, juce::PathStrokeType (4.f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-        g.setColour (amberC); g.strokePath (wetP, juce::PathStrokeType (1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-        if (A > 0.002f && A < Tw)   // where the swell is done
-        {
-            juce::Path at; at.startNewSubPath (tx (A), pa.getY() + 2.f); at.lineTo (tx (A), pa.getBottom());
-            dashed (g, at, cTextHi.withAlpha (0.3f), 1.f);
-            tag (g, "ATTACK", tx (A) + 3.f, pa.getBottom() - 20.f, cTextHi.withAlpha (0.55f));
-        }
-        // the filter's sweep over the same time, on its own frequency scale (80 Hz .. 12 kHz, bottom to top)
-        auto fy = [&] (float hz) { return pa.getBottom() - pa.getHeight() * juce::jlimit (0.f, 1.f, std::log (juce::jmax (hz, 80.f) / 80.f) / std::log (150.f)); };
-        auto cutAt = [&] (float t)
-        {
-            const float fc = P ("freq"), mod = on ("modOn") ? P ("mod") : 0.f, oct = std::abs (mod) < 0.03f ? 0.f : std::abs (mod) * 6.f;
-            const float ph = A < 0.002f ? 1.f : juce::jlimit (0.f, 1.f, t / A);
-            return juce::jmax (40.f, fc / std::pow (2.f, oct * (mod > 0.f ? 1.f - ph : ph)));
+            juce::Path c;
+            const int n = 120;
+            for (int k = 0; k <= n; ++k)
+            {
+                const float t = upTo * (float) k / (float) n;
+                if (k == 0) c.startNewSubPath (tx (t), ay (amp * swelled (t, att))); else c.lineTo (tx (t), ay (amp * swelled (t, att)));
+            }
+            return c;
         };
-        if (filterOn)
+        g.setFont (monoFont (9.f));
+        for (float sec = 1.f; sec < Tw - 0.25f; sec += (Tw > 5.f ? 2.f : 1.f))
         {
-            juce::Path fp;
-            for (int k = 0; k <= 160; ++k) { const float t = Tw * (float) k / 160.f; if (k == 0) fp.startNewSubPath (tx (t), fy (cutAt (t))); else fp.lineTo (tx (t), fy (cutAt (t))); }
-            g.setColour (teal.withAlpha (0.25f)); g.strokePath (fp, juce::PathStrokeType (3.f));
-            g.setColour (teal.withAlpha (0.85f)); g.strokePath (fp, juce::PathStrokeType (1.2f));
-            const float c0 = cutAt (0.f), c1 = cutAt (Tw);
-            tag (g, "FILTER " + tidyValue (String (c0), "Hz").toUpperCase(), pa.getX() + 2.f, juce::jlimit (pa.getY() + 8.f, pa.getBottom() - 14.f, fy (c0) - 7.f), teal.withAlpha (0.85f));
-            if (std::abs (c1 - c0) > 1.f)
-                tag (g, tidyValue (String (c1), "Hz").toUpperCase(), pa.getRight() - 2.f, juce::jlimit (pa.getY() + 8.f, pa.getBottom() - 14.f, fy (c1) - 7.f), teal.withAlpha (0.85f), juce::Justification::centredRight);
+            g.setColour (cGlow.withAlpha (0.09f)); g.fillRect (tx (sec), pa.getY(), 1.f, pa.getHeight());
+            g.setColour (cText.withAlpha (0.4f)); g.drawText (String ((int) sec) + " S", Rect (tx (sec) + 2.f, pa.getBottom() + 1.f, 30.f, 9.f), juce::Justification::centredLeft);
         }
-        // every sounding note: a glowing dot at its time since the pick, named; it fades once past the picture
+        g.setColour (cGlow.withAlpha (0.2f)); g.fillRect (pa.getX(), pa.getBottom(), pa.getWidth(), 1.f);
+        const bool havePick = ! picks.empty() && nowS - picks.back().t0 < 30.0;
+        String caption;
+        float latestAge = -1.f, latestAtt = A0, latestPickStr = 0.f;
+        if (havePick)
         {
-            struct Dot { float x, y, a, midi; };
-            std::vector<Dot> dots;
-            for (int j = 0; j < liveN; ++j)
+            for (size_t k = 0; k + 1 < picks.size(); ++k)   // ghosts of the picks before
             {
-                const float t = liveT[j], fade = t <= Tw ? 1.f : 0.6f;   // a note held past the picture waits at its edge
-                if (fade <= 0.f) continue;
-                const float tc = juce::jmin (t, Tw);
-                dots.push_back ({ tx (tc), ay (swelled (tc, A)), fade * juce::jlimit (0.35f, 1.f, liveLvl[j] / (lvlRef + 1.0e-9f) * 1.6f), liveMidi[j] });
-                if (filterOn)   // the same note on the filter's sweep
+                const auto& pk = picks[k];
+                const float age = (float) (nowS - pk.t0);
+                if (age > Tw + 4.f) continue;
+                const float amp = ampOf (pk.strength), att = A0 * pk.mul;
+                g.setColour (amberC.withAlpha (0.22f)); g.strokePath (curveOf (amp, att, Tw), juce::PathStrokeType (1.f));
+                const float tc = juce::jmin (age, Tw);
+                g.setColour (amberC.withAlpha (0.45f)); g.fillEllipse (tx (tc) - 2.f, ay (amp * swelled (tc, att)) - 2.f, 4.f, 4.f);
+            }
+            const auto& pk = picks.back();
+            const float age = (float) (nowS - pk.t0), amp = ampOf (pk.strength), att = A0 * pk.mul;
+            latestAge = age; latestAtt = att; latestPickStr = pk.pickStrength;
+            juce::Path dryP;   // the guitar alone, at this pick's level
+            for (int k = 0; k <= 120; ++k) { const float t = Tw * (float) k / 120.f, y = ay (amp * natural (t) * (even > 0.f ? 1.f : 1.f)); if (k == 0) dryP.startNewSubPath (tx (t), y); else dryP.lineTo (tx (t), y); }
+            dashed (g, dryP, cream.withAlpha (0.4f), 1.f);
+            const auto whole = curveOf (amp, att, Tw);
+            juce::Path fillP (whole); fillP.lineTo (pa.getRight(), pa.getBottom()); fillP.lineTo (pa.getX(), pa.getBottom()); fillP.closeSubPath();
+            g.setGradientFill (juce::ColourGradient (amberC.withAlpha (0.3f), 0.f, pa.getY(), amberC.withAlpha (0.02f), 0.f, pa.getBottom(), false));
+            g.fillPath (fillP);
+            g.setColour (amberC.withAlpha (0.45f)); g.strokePath (whole, juce::PathStrokeType (1.2f));
+            const float tc = juce::jmin (age, Tw);
+            if (tc > 0.01f)   // the part this note has already played, lit
+            {
+                const auto played = curveOf (amp, att, tc);
+                g.setColour (cGlow.withAlpha (0.35f)); g.strokePath (played, juce::PathStrokeType (4.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+                g.setColour (pale); g.strokePath (played, juce::PathStrokeType (1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            }
+            const float dx2 = tx (tc), dy2 = ay (amp * swelled (tc, att)), dotA = age <= Tw ? 1.f : 0.55f;
+            g.setGradientFill (juce::ColourGradient (pale.withAlpha (0.6f * dotA), dx2, dy2, cGlow.withAlpha (0.f), dx2 + 12.f, dy2, true));
+            g.fillEllipse (dx2 - 12.f, dy2 - 12.f, 24.f, 24.f);
+            g.setColour (pale.withAlpha (dotA)); g.fillEllipse (dx2 - 3.f, dy2 - 3.f, 6.f, 6.f);
+            if (att > 0.002f && att < Tw) { juce::Path at; at.startNewSubPath (tx (att), pa.getY()); at.lineTo (tx (att), pa.getBottom()); dashed (g, at, cTextHi.withAlpha (0.25f), 1.f); }
+            // what this pick did, in words: how hard, and what set its attack
+            const float feelMul = std::pow (2.f, -touch * pk.strength * 2.f);
+            const String how = pk.strength > 0.3f ? "HARD" : pk.strength < -0.3f ? "SOFT" : "PICK";
+            String why;
+            if (std::abs (pk.mul - feelMul) > 0.06f * feelMul) why = " PACE";
+            else if (std::abs (feelMul - 1.f) > 0.06f) why = " FEEL";
+            caption = how + " " + ms (att).toUpperCase() + why;
+        }
+        else
+        {
+            // nothing played yet: the swell an average pick would get, dashed
+            dashed (g, curveOf (1.f, A0, Tw), amberC.withAlpha (0.7f), 1.6f);
+            caption = "PLAY A NOTE";
+        }
+        tag (g, caption, pa.getX(), pa.getY() - 9.f, cTextHi.withAlpha (havePick ? 0.9f : 0.5f));
+
+        // TONE: the filter's response on the latest note at this moment (dashed: where its sweep starts and ends)
+        {
+            const float fLo = 60.f, fHi = 14000.f;
+            auto FX = [&] (float f) { return fr.getX() + fr.getWidth() * std::log (f / fLo) / std::log (fHi / fLo); };
+            auto FY = [&] (float db) { return juce::jlimit (fr.getY() - 4.f, fr.getBottom(), fr.getY() + fr.getHeight() * (12.f - db) / 42.f); };
+            tag (g, "TONE", fr.getX(), fr.getY() - 9.f, (filterOn ? teal : cText).withAlpha (filterOn ? 0.9f : 0.5f));
+            g.setColour (cGlow.withAlpha (0.2f)); g.fillRect (fr.getX(), FY (0.f), fr.getWidth(), 1.f);
+            for (float f : { 100.f, 1000.f, 10000.f }) { g.setColour (cGlow.withAlpha (0.09f)); g.fillRect (FX (f), fr.getY(), 1.f, fr.getHeight()); }
+            g.setFont (monoFont (9.f)); g.setColour (cText.withAlpha (0.4f));
+            g.drawText ("1K", Rect (FX (1000.f) + 2.f, fr.getBottom() + 1.f, 20.f, 9.f), juce::Justification::centredLeft);
+            const int slope = juce::roundToInt (P ("slope"));
+            const float q0 = slope == 4 ? 1.f : 0.5f, q = q0 * std::pow (10.f / q0, juce::jlimit (0.f, 1.f, P ("res")));
+            auto resp = [&] (float cut)
+            {
+                juce::Path rp;
+                for (int k = 0; k <= 90; ++k)
                 {
-                    const float fx = tx (tc), fyy = fy (cutAt (tc));
-                    g.setColour (teal.withAlpha (0.35f * fade)); g.fillEllipse (fx - 5.f, fyy - 5.f, 10.f, 10.f);
-                    g.setColour (teal.withAlpha (fade)); g.fillEllipse (fx - 2.2f, fyy - 2.2f, 4.4f, 4.4f);
+                    const float f = fLo * std::pow (fHi / fLo, (float) k / 90.f), r = f / cut, r2 = r * r;
+                    float h2 = slope == 0 ? 1.f / (1.f + r2) : 1.f / ((1.f - r2) * (1.f - r2) + r2 / (q * q));
+                    if (slope == 4) h2 /= (1.f + r2);
+                    else if (slope >= 2) h2 /= (1.f + r2 * r2);
+                    if (slope == 3) h2 /= (1.f + r2 * r2) * (1.f + r2 * r2);
+                    const float y = FY (10.f * std::log10 (h2 + 1.0e-9f));
+                    if (k == 0) rp.startNewSubPath (FX (f), y); else rp.lineTo (FX (f), y);
                 }
-            }
-            std::sort (dots.begin(), dots.end(), [] (const Dot& a, const Dot& b) { return a.x < b.x; });
-            g.setFont (monoFont (10.f));
-            float lastX = -100.f, lastY = -100.f; int stack = 0;
-            for (auto& d : dots)
+                return rp;
+            };
+            if (! filterOn)
             {
-                g.setGradientFill (juce::ColourGradient (pale.withAlpha (0.55f * d.a), d.x, d.y, cGlow.withAlpha (0.f), d.x + 11.f, d.y, true));
-                g.fillEllipse (d.x - 11.f, d.y - 11.f, 22.f, 22.f);
-                g.setColour (pale.withAlpha (d.a)); g.fillEllipse (d.x - 3.f, d.y - 3.f, 6.f, 6.f);
-                stack = (std::abs (d.x - lastX) < 26.f && std::abs (d.y - lastY) < 14.f) ? stack + 1 : 0;   // names of notes side by side
-                lastX = d.x; lastY = d.y;
-                const float ly2 = juce::jmax (pa.getY() + 6.f, d.y - 12.f - 10.f * (float) stack);
-                g.setColour (pale.withAlpha (0.9f * d.a));
-                g.drawText (noteName (d.midi), Rect (d.x - 20.f, ly2 - 6.f, 40.f, 11.f), juce::Justification::centred);
+                juce::Path flat; flat.startNewSubPath (fr.getX(), FY (0.f)); flat.lineTo (fr.getRight(), FY (0.f));
+                g.setColour (cText.withAlpha (0.5f)); g.strokePath (flat, juce::PathStrokeType (1.4f));
+                tag (g, "OPEN", fr.getRight(), FY (0.f) + 9.f, cText.withAlpha (0.5f), juce::Justification::centredRight);
             }
-            if (dots.empty()) tag (g, "PLAY A NOTE", pa.getRight() - 2.f, pa.getBottom() - 30.f, cText.withAlpha (0.45f), juce::Justification::centredRight);
+            else
+            {
+                const float fc = P ("freq"), mod = on ("modOn") ? P ("mod") : 0.f, oct = std::abs (mod) < 0.03f ? 0.f : std::abs (mod) * 6.f;
+                const float dynOct = P ("pickFilter") * latestPickStr * 4.f;   // DYN: this pick moves the cutoff
+                auto cutAtPh = [&] (float ph) { return juce::jlimit (30.f, 18000.f, fc * std::pow (2.f, -oct * (mod > 0.f ? 1.f - ph : ph) + dynOct)); };
+                const float ph = latestAge < 0.f ? 1.f : (latestAtt < 0.002f ? 1.f : juce::jlimit (0.f, 1.f, latestAge / latestAtt));
+                if (oct > 0.f)   // the sweep's two ends, dashed
+                {
+                    dashed (g, resp (cutAtPh (0.f)), teal.withAlpha (0.35f), 1.f);
+                    dashed (g, resp (cutAtPh (1.f)), teal.withAlpha (0.35f), 1.f);
+                }
+                const float cNow = cutAtPh (ph);
+                const auto now = resp (cNow);
+                g.setColour (teal.withAlpha (0.3f)); g.strokePath (now, juce::PathStrokeType (4.f));
+                g.setColour (teal); g.strokePath (now, juce::PathStrokeType (1.6f));
+                const float cx2 = FX (juce::jlimit (fLo, fHi, cNow));
+                g.setColour (teal.withAlpha (0.9f)); g.fillEllipse (cx2 - 2.5f, FY (0.f) - 2.5f, 5.f, 5.f);
+                const String hz = cNow >= 1000.f ? String (cNow / 1000.f, cNow >= 10000.f ? 0 : 1) + " KHZ" : String (juce::roundToInt (cNow)) + " HZ";
+                tag (g, hz, fr.getRight(), fr.getY() - 9.f, teal.withAlpha (0.85f), juce::Justification::centredRight);
+            }
         }
+
         // the NOTES switch: the tracked notes over time, faint underneath
         {
             const auto r = notesRect();
@@ -1747,7 +1811,7 @@ struct SignalWindow : juce::Component, juce::Timer
         }
 
         // input level, with the zone where the tracking works best
-        const float mx1 = b.getWidth() - 12.f, mx0 = mx1 - 58.f, my = 9.f;
+        const float mx0 = 86.f, mx1 = mx0 + 52.f, my = 6.f;   // beside the NOTES switch
         auto mX = [&] (float db) { return mx0 + juce::jlimit (0.f, 1.f, (db + 60.f) / 60.f) * (mx1 - mx0); };
         g.setColour (juce::Colours::black.withAlpha (0.55f)); g.fillRoundedRectangle (mx0 - 1.f, my - 1.f, mx1 - mx0 + 2.f, 6.f, 2.f);
         g.setColour (pale.withAlpha (0.16f)); g.fillRect (mX (-24.f), my, mX (-6.f) - mX (-24.f), 4.f);
@@ -1827,6 +1891,8 @@ struct SignalWindow : juce::Component, juce::Timer
     std::array<Col, kCols> cols {};
     int head = 0, idle = 0, quiet = 0, roTicks = 0, linger = 0, peakHoldT = 0, pickCols = 99;
     uint32_t lastFrame = 0, lastSeq = 0;
+    struct Pick { uint32_t seq; double t0; float mul, strength, pickStrength; };   // mul = its attack / ATTACK
+    std::vector<Pick> picks;
     int liveN = 0;
     float liveMidi[kMaxN] {}, liveLvl[kMaxN] {}, liveT[kMaxN] {};
     float viewA = 0.f, noteAge = -1.f, noteAttack = 0.f, paramSum = 0.f, lvlRef = 1.0e-6f,

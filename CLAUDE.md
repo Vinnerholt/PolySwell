@@ -193,3 +193,10 @@ rings (outer = lightest). Switch: SKIN chip in the top bar or gear > Skin; saved
 - JUCE `drawImage` uses the current colour's alpha: set `g.setOpacity (1.f)` before drawing the plate / logo.
 - Stripes moved to the footswitch row, 42 % alpha. Panel: FILTER | FEEDBACK, MOTION | SPACE, LAYER full width (knobs +
   octave/MONO/UNISON left, all nine waves in a WAVE box right; no MORE menu).
+- Window live view, round 3 (owner: the per-note view was static; it must show how the playing is shaped): LEVEL | TONE.
+  LEVEL (left 63 %): one swell per pick from `latestNote()` (last 4 kept in `picks`: time, attack / ATTACK = `mul`,
+  strength, pickStrength), so ATTACK still acts live; level after EVEN (half the dB, so soft picks stay readable);
+  the latest lit up to "now" with a travelling dot, the earlier ones as faint ghosts; caption HARD/SOFT/PICK + its attack
+  + PACE or FEEL when they changed it. Nothing played: an average pick's swell dashed. TONE (right): the filter response
+  on the latest note now (RES peak, slope, MOD sweep position with its two ends dashed, DYN shift by the pick), "OPEN"
+  when off. Input meter moved beside the NOTES switch. FootSwitch photo needed `setOpacity (1.f)` too.
