@@ -1688,13 +1688,13 @@ struct SignalWindow : juce::Component, juce::Timer
         const Rect fr (split + 8.f, 24.f, b.getWidth() - split - 16.f, b.getHeight() - 46.f);  // TONE
         if (filterOn) { g.setColour (cGlow.withAlpha (0.12f)); g.fillRect (split, pa.getY() - 8.f, 1.f, pa.getHeight() + 12.f); }
         // time: square-root axis, so the first second (where notes are played and released) gets most of the glass
-        auto tx = [&] (float t) { return pa.getX() + pa.getWidth() * std::sqrt (juce::jlimit (0.f, 1.f, t / Tw)); };
+        auto tx = [&] (float t) { return pa.getX() + pa.getWidth() * std::pow (juce::jlimit (0.f, 1.f, t / Tw), 0.65f); };   // t^0.65: the first second gets most of the glass, the very start not too much
         const float even = P ("even"), touch = P ("touch");
         auto ampOf = [&] (float strength) { return std::pow (10.f, strength * 12.f * (1.f - even) / 40.f); };   // half the dB, so soft picks stay readable
         float pkRef = 1.0e-6f;
         for (int k = 0; k <= 120; ++k) pkRef = juce::jmax (pkRef, swelled (Tw * (float) k / 120.f, A0));
-        // level: in dB, as it is heard - 48 dB from the bottom to the top, the hardest pick's peak just under the top
-        const float topDb = 20.f * std::log10 (pkRef * ampOf (1.f) + 1.0e-9f) + 1.f, rangeDb = 48.f;   // 48 dB: SLOW and BOWED show from early on
+        // level: in dB, as it is heard - 54 dB from the bottom to the top, the hardest pick's peak just under the top
+        const float topDb = 20.f * std::log10 (pkRef * ampOf (1.f) + 1.0e-9f) + 1.f, rangeDb = 54.f;   // 54 dB: SLOW and BOWED show from early on
         auto ay = [&] (float a) { const float db = 20.f * std::log10 (a + 1.0e-9f); return pa.getBottom() - pa.getHeight() * juce::jlimit (0.f, 1.f, (db - (topDb - rangeDb)) / rangeDb); };
         auto curveOf = [&] (float amp, float att, float upTo)
         {
