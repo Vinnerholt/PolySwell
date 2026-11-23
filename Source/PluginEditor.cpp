@@ -2812,46 +2812,50 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
             g.setOpacity (1.f);
             g.drawImage (sk.plateImg(), pr, juce::RectanglePlacement::stretchToFit);
         }
-        // ATTACK's printed zones (owner: show where the knob is best used): PICK | SWELL | PAD | DRONE, a tick at each border
-        // (0.1 s, 0.6 s, 3 s, placed through the knob's own taper) and a dot at the POG2 setting measured on the owner's pedal
+        // printed zones (owner: show where a knob is best used): words bent along the circle, each centred on its zone
+        // through the knob's own taper, ticks at the borders and an accent dot at the setting measured on the owner's POG2
         {
-            const float cx = pr.getX() + 84.f, cy = pr.getY() + 276.f;
-            auto* prm = proc.apvts.getParameter ("attack");
-            auto angOf = [&] (float sec) { return 1.25f * kPi + prm->convertTo0to1 (sec * 1000.f) * 1.5f * kPi; };
-            auto at = [&] (float ang, float r) { return juce::Point<float> (cx + r * std::sin (ang), cy - r * std::cos (ang)); };
-            g.setColour (sk.ink.withAlpha (0.6f));
-            for (float sec : { 0.1f, 0.6f, 3.f })
+            struct Zone { const char* word; float lo, hi; };
+            auto zones = [&] (float kx, float ky, const char* paramId, std::initializer_list<float> borders,
+                              std::initializer_list<Zone> words, float dotAt)
             {
-                const float a = angOf (sec);
-                g.drawLine (juce::Line<float> (at (a, 44.5f), at (a, 48.5f)), 1.2f);
-            }
-            const auto pog = at (angOf (2.f), 46.5f);
-            g.setColour (sk.accent); g.fillEllipse (pog.x - 2.4f, pog.y - 2.4f, 4.8f, 4.8f);
-            // the words follow the circle, centred on their zone, letters upright to the outside
-            const auto f = uiFont (8.f, true, 0.16f);
-            g.setFont (f);
-            g.setColour (sk.ink.withAlpha (0.8f));
-            auto arcText = [&] (const String& txt, float mid, float r)
-            {
-                float total = 0.f;
-                for (int k = 0; k < txt.length(); ++k) total += juce::GlyphArrangement::getStringWidth (f, txt.substring (k, k + 1));
-                float x = -total * 0.5f;
-                for (int k = 0; k < txt.length(); ++k)
+                const float cx = pr.getX() + kx, cy = pr.getY() + ky;
+                auto* prm = proc.apvts.getParameter (paramId);
+                auto angOf = [&] (float v) { return 1.25f * kPi + prm->convertTo0to1 (v) * 1.5f * kPi; };
+                auto at = [&] (float ang, float r) { return juce::Point<float> (cx + r * std::sin (ang), cy - r * std::cos (ang)); };
+                g.setColour (sk.ink.withAlpha (0.6f));
+                for (float v : borders) { const float a = angOf (v); g.drawLine (juce::Line<float> (at (a, 44.5f), at (a, 48.5f)), 1.2f); }
+                const auto dot = at (angOf (dotAt), 46.5f);
+                g.setColour (sk.accent); g.fillEllipse (dot.x - 2.4f, dot.y - 2.4f, 4.8f, 4.8f);
+                const auto f = uiFont (8.f, true, 0.16f);
+                g.setFont (f);
+                g.setColour (sk.ink.withAlpha (0.8f));
+                const float r = 52.f;   // the words outside the ticks and the dot
+                for (auto& z : words)
                 {
-                    const String ch = txt.substring (k, k + 1);
-                    const float w = juce::GlyphArrangement::getStringWidth (f, ch), a = mid + (x + w * 0.5f) / r;
-                    const auto pt = at (a, r);
-                    Graphics::ScopedSaveState ss (g);
-                    g.addTransform (juce::AffineTransform::rotation (a).translated (pt.x, pt.y));
-                    g.drawText (ch, Rect (-w, -6.f, 2.f * w, 12.f), juce::Justification::centred, false);
-                    x += w;
+                    const String txt (z.word);
+                    const float mid = 0.5f * (angOf (z.lo) + angOf (z.hi));
+                    float total = 0.f;
+                    for (int k = 0; k < txt.length(); ++k) total += juce::GlyphArrangement::getStringWidth (f, txt.substring (k, k + 1));
+                    float x = -total * 0.5f;
+                    for (int k = 0; k < txt.length(); ++k)
+                    {
+                        const String ch = txt.substring (k, k + 1);
+                        const float w = juce::GlyphArrangement::getStringWidth (f, ch), a = mid + (x + w * 0.5f) / r;
+                        const auto pt = at (a, r);
+                        Graphics::ScopedSaveState ss (g);
+                        g.addTransform (juce::AffineTransform::rotation (a).translated (pt.x, pt.y));
+                        g.drawText (ch, Rect (-w, -6.f, 2.f * w, 12.f), juce::Justification::centred, false);
+                        x += w;
+                    }
                 }
             };
-            const float r = 52.f;   // the words outside the ticks and the dot
-            arcText ("PICK",  0.5f * (angOf (0.f) + angOf (0.1f)), r);
-            arcText ("SWELL", 0.5f * (angOf (0.1f) + angOf (0.6f)), r);
-            arcText ("PAD",   0.5f * (angOf (0.6f) + angOf (1.4f)), r);   // before the dot at 2 s
-            arcText ("DRONE", 0.5f * (angOf (3.f) + angOf (12.f)), r);
+            // ATTACK (ms): PICK | SWELL | PAD | DRONE; the POG2 setting 2 s (PAD centred before the dot)
+            zones (84.f, 276.f, "attack", { 100.f, 600.f, 3000.f },
+                   { { "PICK", 0.f, 100.f }, { "SWELL", 100.f, 600.f }, { "PAD", 600.f, 1400.f }, { "DRONE", 3000.f, 12000.f } }, 2000.f);
+            // TONE (Hz): DARK | WARM | OPEN; the POG2 setting 1 kHz (WARM centred after the dot)
+            zones (308.f, 276.f, "freq", { 500.f, 2500.f },
+                   { { "DARK", 120.f, 500.f }, { "WARM", 1150.f, 2500.f }, { "OPEN", 2500.f, 12000.f } }, 1000.f);
         }
         for (auto& gr : pedalGroups)
         {

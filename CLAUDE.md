@@ -241,6 +241,6 @@ rings (outer = lightest). Switch: SKIN chip in the top bar or gear > Skin; saved
 Default (ATTACK 150 ms only), Default dynamic, Smooth lead, Violin, Gated VG (the mk.gee kind: VG pad voice, driven gated
 reverb, detune; not named after the artist, the plugin is public), Ambient pad, Glass shimmer, POG2, Amp in the room,
 Slow gear, Reverse tape (MATCH off), Envelope filter, Warble. LEVEL per preset so `--peaks` sits at -7..-10 dBFS (input -9).
-- ATTACK printed zones (2026-11-23, owner): PICK 0-0.1 s | SWELL 0.1-0.6 s | PAD 0.6-3 s | DRONE 3-12 s, the words bent
+- Printed zones (2026-11-23, owner), `zones` lambda in `bake`; TONE: DARK 120-500 | WARM 500-2.5k | OPEN 2.5-12k, dot at 1 kHz. ATTACK: PICK 0-0.1 s | SWELL 0.1-0.6 s | PAD 0.6-3 s | DRONE 3-12 s, the words bent
   along the circle (r 52, each centred on its zone through the knob's taper, `arcText` in `bake`), border ticks (r 44.5-48.5)
   and an accent dot at 2 s (the owner's measured POG2 setting). Move the borders / dot after the preset tuning if needed.
