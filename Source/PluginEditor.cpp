@@ -2418,7 +2418,7 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         for (int i = 0; i < 3; ++i)
         {
             knob (bid[i], bn[i], 0, px + bx[i], py + 276, col::amber, g, bsz[i]);
-            label (bn[i], { px + bx[i] - 60, py + (i == 1 ? 306.f : 327.f), 120, 16 }, i == 1 ? 10.5f : 13.f, col::ink, juce::Justification::centred, true, 0.18f);
+            label (bn[i], { px + bx[i] - 60 - (i == 0 ? 10.f : 0.f), py + (i == 1 ? 306.f : 327.f), 120, 16 }, i == 1 ? 10.5f : 13.f, col::ink, juce::Justification::centred, true, 0.18f);
         }
         // row 2 in two printed groups: how the swell follows your playing | what comes out
         struct Grp { const char* title; float x, w; std::vector<std::pair<const char*, const char*>> ks; std::vector<float> xs; };
@@ -2447,7 +2447,7 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         label ("ON", { px + 128 - 20, py + 592, 40, 14 }, 12.f, col::ink, juce::Justification::centred, true, 0.18f);
         // CURVE: three pictures beside the printed ATTACK label (the curve belongs to ATTACK): POG2 (default), SLOW, BOWED
         curveSeg = std::make_unique<CurveSeg> (proc, &currentSkin);
-        curveSeg->setBounds (juce::roundToInt (px + 114), juce::roundToInt (py + 327), 66, 17);
+        curveSeg->setBounds (juce::roundToInt (px + 104), juce::roundToInt (py + 328), 60, 16);   // clear of SUSTAIN's label
         static_cast<CurveSeg*> (curveSeg.get())->onMenu = [this] { midiMenu ("swellShape", *curveSeg); };
         addAndMakeVisible (*curveSeg);
         // MATCH: a mini toggle mirroring the LED on the other side of the footswitch
