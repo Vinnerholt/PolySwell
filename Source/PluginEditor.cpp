@@ -2024,13 +2024,21 @@ struct WaveScope : juce::Component, juce::Timer, juce::SettableTooltipClient
 // a small bat-handle toggle switch, like a pedal's mini switch: lever up = on (MATCH on the pedal)
 struct MiniToggle : juce::Component, juce::SettableTooltipClient
 {
-    MiniToggle (PolySwellProcessor& p, const String& id) : bound (p, id, [this] { repaint(); })
+    // two positions (up = 1, down = 0), or three: `values` gives the parameter value for up, middle, down
+    MiniToggle (PolySwellProcessor& p, const String& id, std::vector<float> threeWay = {})
+        : values (std::move (threeWay)), bound (p, id, [this] { repaint(); })
     { setMouseCursor (juce::MouseCursor::PointingHandCursor); }
+    int position() const   // -1 up, 0 middle, +1 down
+    {
+        if (values.size() != 3) return bound.value > 0.5f ? -1 : 1;
+        for (int k = 0; k < 3; ++k) if (std::abs (bound.value - values[(size_t) k]) < 0.5f) return k - 1;
+        return 0;
+    }
     void paint (Graphics& g) override
     {
         const auto b = getLocalBounds().toFloat();
         const float c = b.getCentreX(), cy = b.getCentreY();
-        const bool on = bound.value > 0.5f;
+        const int pos = position();
         // the hex nut and the dark bushing
         juce::Path nut;
         for (int k = 0; k < 6; ++k) { const float a = kPi / 6.f + (float) k * kPi / 3.f, x = c + 9.5f * std::cos (a), y = cy + 9.5f * std::sin (a); if (k == 0) nut.startNewSubPath (x, y); else nut.lineTo (x, y); }
@@ -2040,8 +2048,8 @@ struct MiniToggle : juce::Component, juce::SettableTooltipClient
         g.fillPath (nut);
         g.setColour (juce::Colours::black.withAlpha (0.35f)); g.strokePath (nut, juce::PathStrokeType (0.8f));
         g.setColour (Colour (0xff1a1816)); g.fillEllipse (c - 4.f, cy - 4.f, 8.f, 8.f);
-        // the lever: a tapered chrome bat, up (on) or down (off), drawn in perspective
-        const float dir = on ? -1.f : 1.f, len = 15.f, tipY = cy + dir * len;
+        // the lever: a tapered chrome bat, up / (middle: pointing at you, short) / down, drawn in perspective
+        const float dir = (float) pos, len = pos == 0 ? 3.f : 15.f, tipY = cy + dir * len;
         juce::Path lever;
         lever.startNewSubPath (c - 2.6f, cy); lever.lineTo (c - 3.6f, tipY); lever.lineTo (c + 3.6f, tipY); lever.lineTo (c + 2.6f, cy); lever.closeSubPath();
         g.setGradientFill (juce::ColourGradient (Colour (0xfff7f6f2), c - 3.f, cy, Colour (0xff8a8884), c + 3.f, cy, false));
@@ -2053,9 +2061,16 @@ struct MiniToggle : juce::Component, juce::SettableTooltipClient
     void mouseDown (const juce::MouseEvent& e) override
     {
         if (e.mods.isPopupMenu()) { if (onMenu) onMenu(); return; }
+        if (values.size() == 3)   // the top, middle or bottom third picks the position
+        {
+            const int k = juce::jlimit (0, 2, (int) (e.position.y / ((float) getHeight() / 3.f)));
+            bound.set (values[(size_t) k]);
+            return;
+        }
         bound.set (bound.value > 0.5f ? 0.f : 1.f);
     }
     std::function<void()> onMenu;
+    std::vector<float> values;
     Bound bound;
 };
 
@@ -2372,22 +2387,33 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
 
         // the ON footswitch, centred, its LED to the left
         addAndMakeVisible (onLed);
-        onLed.setBounds (juce::roundToInt (px + 128 - 18), juce::roundToInt (py + 574 - 18), 36, 36);   // room for the glow
+        onLed.setBounds (juce::roundToInt (px + 254 - 18), juce::roundToInt (py + 574 - 18), 36, 36);   // room for the glow
         onLed.pedalSkin = &currentSkin;
         addAndMakeVisible (onSw);
         onSw.setBounds (juce::roundToInt (px + 196 - 36), juce::roundToInt (py + 584 - 36), 72, 72);
         onSw.setTooltip ("ON: switches the pedal in or out (bypass). Right-click: MIDI learn (a footswitch on your controller).");
         onSw.onMenu = [this] { midiMenu ("bypass", onSw); };
         onSw.onDown = [this] { setParam ("bypass", getParam ("bypass") > 0.5f ? 0.f : 1.f); };
-        label ("ON", { px + 128 - 20, py + 592, 40, 14 }, 12.f, col::ink, juce::Justification::centred, true, 0.18f);
+        label ("ON", { px + 254 - 20, py + 592, 40, 14 }, 12.f, col::ink, juce::Justification::centred, true, 0.18f);
+        // CURVE: a three-way mini toggle left of the LED: up POG2 (default), middle CLASSIC, down BOWED (swellShape 2 / 0 / 1)
+        curveSw = std::make_unique<MiniToggle> (proc, "swellShape", std::vector<float> { 2.f, 0.f, 1.f });
+        curveSw->setTooltip ("CURVE: how a note fades in. Up: POG2 (the default, measured from the pedal: loud quickly, then a long tail). "
+                             "Middle: CLASSIC (starts quiet, grows evenly: slow pads). Down: BOWED (an S-curve, like a bow). Click the top, middle or bottom.");
+        curveSw->onMenu = [this] { midiMenu ("swellShape", *curveSw); };
+        curveSw->setBounds (juce::roundToInt (px + 126 - 16), juce::roundToInt (py + 572 - 21), 32, 42);
+        addAndMakeVisible (*curveSw);
+        label ("CURVE", { px + 126 - 30, py + 592, 60, 14 }, 12.f, col::ink, juce::Justification::centred, true, 0.18f);
+        label ("POG2", { px + 60, py + 572 - 18, 50, 10 }, 7.5f, col::ink, juce::Justification::centredRight, true, 0.12f);
+        label ("CLASSIC", { px + 60, py + 572 - 5, 50, 10 }, 7.5f, col::ink, juce::Justification::centredRight, true, 0.12f);
+        label ("BOWED", { px + 60, py + 572 + 8, 50, 10 }, 7.5f, col::ink, juce::Justification::centredRight, true, 0.12f);
         // MATCH: a mini toggle mirroring the LED on the other side of the footswitch
         matchSw = std::make_unique<MiniToggle> (proc, "levelMatch");
         matchSw->setTooltip ("MATCH: each note's swell ends as loud as its pick (up = on, the default). Off: the note keeps the string's own fade, so looser playing stays quieter. "
                              "The POG2 has no such switch: its built-in gain always brings plucks back to about their pick level, which is MATCH on. Right-click: MIDI learn.");
         matchSw->onMenu = [this] { midiMenu ("levelMatch", *matchSw); };
-        matchSw->setBounds (juce::roundToInt (px + 264 - 16), juce::roundToInt (py + 572 - 20), 32, 40);
+        matchSw->setBounds (juce::roundToInt (px + 314 - 16), juce::roundToInt (py + 572 - 20), 32, 40);
         addAndMakeVisible (*matchSw);
-        label ("MATCH", { px + 264 - 30, py + 592, 60, 14 }, 12.f, col::ink, juce::Justification::centred, true, 0.18f);
+        label ("MATCH", { px + 314 - 30, py + 592, 60, 14 }, 12.f, col::ink, juce::Justification::centred, true, 0.18f);
     }
 
     // ---- panel
@@ -3022,7 +3048,7 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
     const Skin* currentSkin = nullptr; Chip* abC[2] { nullptr, nullptr }; Chip* bodyC = nullptr;
     Led onLed { proc, "bypass", true, "Lit while the pedal is on." };
     FootSwitch onSw;
-    std::unique_ptr<MiniToggle> matchSw;
+    std::unique_ptr<MiniToggle> matchSw, curveSw;
     DrawerTab drawer;
     std::vector<std::pair<Rect, Colour>> subBoxes;
     std::unique_ptr<juce::Component> waveScope, waveGrid;

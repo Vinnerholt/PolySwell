@@ -244,3 +244,8 @@ Slow gear, Reverse tape (MATCH off), Envelope filter, Warble. LEVEL per preset s
 - Printed zones (2026-11-23, owner), `zones` lambda in `bake`; TONE: DARK 120-500 | WARM 500-2.5k | OPEN 2.5-12k, dot at 1 kHz. ATTACK: PICK 0-0.1 s | SWELL 0.1-0.6 s | PAD 0.6-3 s | DRONE 3-12 s, the words bent
   along the circle (r 52, each centred on its zone through the knob's taper, `arcText` in `bake`), border ticks (r 44.5-48.5)
   and an accent dot at 2 s (the owner's measured POG2 setting). Move the borders / dot after the preset tuning if needed.
+- CURVE on the pedal (2026-11-23, owner): a three-way `MiniToggle` (`values` = { 2, 0, 1 }: up POG2 default, middle
+  CLASSIC, down BOWED; click its top / middle / bottom third) left of the footswitch with the positions printed beside it;
+  ON LED and MATCH moved right of the footswitch. Measured: no hidden gain; the POG2 curve is front-loaded by nature
+  (ATTACK 7 s, held note: POG2 -27 dB at 0.1 s, -9 at 1 s; Classic -74 / -34), so slow pads = CLASSIC or BOWED.
+  The POG2 slider top is tau >= 4 s (12 s+ on our scale): the json's t50/t90 are against unity, not the swell's own end.
