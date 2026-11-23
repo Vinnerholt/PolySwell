@@ -255,3 +255,6 @@ Slow gear, Reverse tape (MATCH off), Envelope filter, Warble. LEVEL per preset s
 - Window LEVEL axes (owner: notes looked "still on the way up" when released): height in dB (36 dB range, the hardest pick's
   peak at the top; faint lines at -6/-12/-24) and a square-root time axis (the first second gets most of the glass;
   ticks .25/.5/1/2/4/8 s). POG2 at ATTACK 2 s: -5 dB at 0.5 s now draws ~86 % up instead of 56 %.
+- FEEDBACK rise counts from the pick (owner: after the swell, a 2 s ATTACK left no time): `fbAmt` grows while the bin is
+  active; `fbBloom` is multiplied by the note's swell gain, so the harmonic is never ahead of the swell. Window live view and
+  the FEEDBACK picture follow. Test 37.

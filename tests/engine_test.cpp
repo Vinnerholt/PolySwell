@@ -1406,6 +1406,27 @@ int main()
         check(std::abs(matchDb) < 1.0, "with MATCH the POG2 gain is left out (MATCH does that job per note)");
     }
 
+    std::printf("Test 37: the feedback rise counts from the pick, never ahead of the swell (POG2, ATTACK 2 s, rise 1.2 s)\n");
+    {
+        std::vector<float> x((size_t) at(4.0));
+        for (size_t i = 0; i < x.size(); ++i)
+        {
+            const double t = (double) i / kSr;
+            x[i] = (float) (0.25 * std::pow(10.0, -6.0 * t / 20.0) * std::sin(2 * kPi * 220.0 * t));
+        }
+        const int lat = kLatencySamples, w = 4800;
+        Params p; p.attackMs = 2000.f; p.swellShape = 2; p.feedback = 1.f; p.fbHarmonic = 0;
+        const Out o = run(x, p);
+        const double oct05 = amp(o.wet, at(0.5) + lat, w, 440.0), fund05 = amp(o.wet, at(0.5) + lat, w, 220.0);
+        const double oct18 = amp(o.wet, at(1.8) + lat, w, 440.0), fund18 = amp(o.wet, at(1.8) + lat, w, 220.0);
+        Params q = p; q.feedback = 0.f;
+        const Out o0 = run(x, q);
+        const double oct18off = amp(o0.wet, at(1.8) + lat, w, 440.0);
+        std::printf("  octave at 0.5 s %.4f (note %.4f), at 1.8 s %.4f (note %.4f; without feedback %.4f)\n", oct05, fund05, oct18, fund18, oct18off);
+        check(oct18 > 0.3 * fund18 && oct18 > 5.0 * oct18off, "with a 2 s swell the octave has bloomed by 1.8 s (before the swell ends)");
+        check(oct05 < 0.5 * fund05, "early in the swell the harmonic stays under the note");
+    }
+
     std::printf("%s\n", failures ? "SOME TESTS FAILED" : "ALL TESTS PASSED");
     return failures ? 1 : 0;
 }

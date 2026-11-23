@@ -893,8 +893,9 @@ struct SignalWindow : juce::Component, juce::Timer
             c.hot[k] = juce::jlimit (0.f, 1.f, (20.f * std::log10 ((out[band] + 1.0e-9f) / (in[band] + 1.0e-9f)) - 3.f) / 12.f);
             if (fbOn)
             {
-                const float x = juce::jlimit (0.f, 1.f, (v[j].timeSec - A - 0.25f * rise) / (0.75f * rise));
-                c.fb[k] = immediate ? P ("feedback") : P ("feedback") * x * x * (3.f - 2.f * x);
+                const float x = juce::jlimit (0.f, 1.f, (v[j].timeSec - 0.25f * rise) / (0.75f * rise));   // from the pick, never ahead of the swell
+                const float sw = A < 0.002f ? 1.f : swellGain (v[j].timeSec / A, juce::roundToInt (P ("swellShape")));
+                c.fb[k] = immediate ? P ("feedback") : P ("feedback") * x * x * (3.f - 2.f * x) * sw;
             }
         }
         c.cut = cutoffAt (noteAge);
@@ -1172,14 +1173,15 @@ struct SignalWindow : juce::Component, juce::Timer
             {
                 auto ov = [=] (float t)
                 {
-                    const float x = juce::jlimit (0.f, 1.f, (t - A - 0.25f * rise) / (0.75f * rise));
-                    return 0.8f * fb * x * x * (3.f - 2.f * x) * std::pow (10.f, -0.6f * t / 20.f) * 0.75f;
+                    const float x = juce::jlimit (0.f, 1.f, (t - 0.25f * rise) / (0.75f * rise));   // from the pick
+                    const float sw = A < 0.002f ? 1.f : swellGain (t / A, juce::roundToInt (P ("swellShape")));   // never ahead of the swell
+                    return 0.8f * fb * x * x * (3.f - 2.f * x) * sw * std::pow (10.f, -0.6f * t / 20.f) * 0.75f;
                 };
-                glowLine (g, curve (pl, A, ov), Colour (0xffff8a6a));
-                tag (g, "FEEDBACK", pl.x (juce::jmin (A + rise, 2.5f)) + 4.f, pl.y (ov (juce::jmin (A + rise, 2.5f))) - 11.f, Colour (0xffff8a6a));
+                glowLine (g, curve (pl, 0.f, ov), Colour (0xffff8a6a));
+                tag (g, "FEEDBACK", pl.x (juce::jmin (rise, 2.5f)) + 4.f, pl.y (ov (juce::jmin (rise, 2.5f))) - 11.f, Colour (0xffff8a6a));
             }
             if (id == "fbTone") return "how bright the fed-back harmonic is";
-            return fb > 0.005f ? "a held note blooms into feedback after " + ms (A + 0.25f * rise) : "off: no feedback";
+            return fb > 0.005f ? "a held note blooms into feedback from " + ms (0.25f * rise) + " after the pick (with the swell)" : "off: no feedback";
         }
         if (id == "sustain" || id == "sustainMax") return P ("sustain") > 0.005f ? "the note fades more slowly than the guitar (dashed: without)" : "off: the note fades like the guitar";
         if (id == "vol") return "output level (dashed: 0 dB)";

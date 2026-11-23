@@ -833,7 +833,9 @@ private:
                 boost = std::min(hold[i] / env[i], maxBoost);
             if (fbOn)
             {
-                if (active[i] && ph >= 1.f) fbAmt[i] = std::min(1.f, fbAmt[i] + fbRiseInc);   // blooms on held notes
+                // the rise counts from the pick (owner: after the swell, a 2 s ATTACK left no time for it); fbBloom keeps it
+                // from getting ahead of the swell, so a slow swell never has its harmonic before the note
+                if (active[i]) fbAmt[i] = std::min(1.f, fbAmt[i] + fbRiseInc);
                 // amp model: a muted string stops feeding back at once (and starts over if it is let ring again)
                 if (params.fbAmp && fbAmt[i] > 0.f && m < tuning::fbMuteRatio * env[i]) { fbAmt[i] = 0.f; fbHold[i] = m; }
                 fbHold[i] = std::max(env[i], fbHold[i] * fbHoldDecay);
@@ -991,7 +993,7 @@ private:
     {
         if (params.fbMode == 1) return params.feedback;                 // harmonizer: there from the pick
         const float x = std::clamp((fbAmt[i] - 0.25f) / 0.75f, 0.f, 1.f);
-        return params.feedback * x * x * (3.f - 2.f * x);
+        return params.feedback * x * x * (3.f - 2.f * x) * std::min(1.f, swellGain(phase[i], params.swellShape));   // never ahead of the swell
     }
 
     // FEEDBACK: every held partial (spectral peak) gets an overtone at ratio x its true frequency
