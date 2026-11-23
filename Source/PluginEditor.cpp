@@ -1685,13 +1685,15 @@ struct SignalWindow : juce::Component, juce::Timer
         const Rect pa (14.f, 24.f, split - 20.f, b.getHeight() - 46.f);                       // LEVEL
         const Rect fr (split + 8.f, 24.f, b.getWidth() - split - 16.f, b.getHeight() - 46.f);  // TONE
         if (filterOn) { g.setColour (cGlow.withAlpha (0.12f)); g.fillRect (split, pa.getY() - 8.f, 1.f, pa.getHeight() + 12.f); }
-        auto tx = [&] (float t) { return pa.getX() + pa.getWidth() * juce::jlimit (0.f, 1.f, t / Tw); };
+        // time: square-root axis, so the first second (where notes are played and released) gets most of the glass
+        auto tx = [&] (float t) { return pa.getX() + pa.getWidth() * std::sqrt (juce::jlimit (0.f, 1.f, t / Tw)); };
         const float even = P ("even"), touch = P ("touch");
         auto ampOf = [&] (float strength) { return std::pow (10.f, strength * 12.f * (1.f - even) / 40.f); };   // half the dB, so soft picks stay readable
         float pkRef = 1.0e-6f;
         for (int k = 0; k <= 120; ++k) pkRef = juce::jmax (pkRef, swelled (Tw * (float) k / 120.f, A0));
-        const float full = pkRef * ampOf (1.f) / 0.95f;   // the hardest pick peaks just under the top (nothing is squashed)
-        auto ay = [&] (float a) { return pa.getBottom() - pa.getHeight() * juce::jlimit (0.f, 1.f, a / full); };
+        // level: in dB, as it is heard - 36 dB from the bottom to the top, the hardest pick's peak just under the top
+        const float topDb = 20.f * std::log10 (pkRef * ampOf (1.f) + 1.0e-9f) + 1.f, rangeDb = 36.f;
+        auto ay = [&] (float a) { const float db = 20.f * std::log10 (a + 1.0e-9f); return pa.getBottom() - pa.getHeight() * juce::jlimit (0.f, 1.f, (db - (topDb - rangeDb)) / rangeDb); };
         auto curveOf = [&] (float amp, float att, float upTo)
         {
             juce::Path c;
@@ -1704,10 +1706,18 @@ struct SignalWindow : juce::Component, juce::Timer
             return c;
         };
         g.setFont (monoFont (9.f));
-        for (float sec = 1.f; sec < Tw - 0.25f; sec += (Tw > 5.f ? 2.f : 1.f))
+        for (float sec : { 0.25f, 0.5f, 1.f, 2.f, 4.f, 8.f })
         {
+            if (sec > Tw - 0.15f) break;
             g.setColour (cGlow.withAlpha (0.09f)); g.fillRect (tx (sec), pa.getY(), 1.f, pa.getHeight());
-            g.setColour (cText.withAlpha (0.4f)); g.drawText (String ((int) sec) + " S", Rect (tx (sec) + 2.f, pa.getBottom() + 1.f, 30.f, 9.f), juce::Justification::centredLeft);
+            if (sec < 0.4f) continue;   // 0.25 s: a line, no label (it would crowd 0.5 s)
+            const String lab = sec < 1.f ? String (".5 S") : String ((int) sec) + " S";
+            g.setColour (cText.withAlpha (0.4f)); g.drawText (lab, Rect (tx (sec) + 2.f, pa.getBottom() + 1.f, 30.f, 9.f), juce::Justification::centredLeft);
+        }
+        for (float db : { -6.f, -12.f, -24.f })   // faint level lines
+        {
+            const float y = pa.getBottom() - pa.getHeight() * ((topDb - 1.f + db) - (topDb - rangeDb)) / rangeDb;
+            g.setColour (cGlow.withAlpha (0.06f)); g.fillRect (pa.getX(), y, pa.getWidth(), 1.f);
         }
         g.setColour (cGlow.withAlpha (0.2f)); g.fillRect (pa.getX(), pa.getBottom(), pa.getWidth(), 1.f);
         const bool havePick = ! picks.empty() && nowS - picks.back().t0 < 30.0;
@@ -1763,7 +1773,8 @@ struct SignalWindow : juce::Component, juce::Timer
             dashed (g, curveOf (1.f, A0, Tw), amberC.withAlpha (0.7f), 1.6f);
             caption = "PLAY A NOTE";
         }
-        tag (g, caption, notesRect().getRight() + 8.f, notesRect().getCentreY() + 0.5f, cTextHi.withAlpha (havePick ? 0.9f : 0.5f));
+        g.setFont (monoFont (10.5f)); g.setColour (cTextHi.withAlpha (havePick ? 0.9f : 0.5f));   // wider than a tag: "SOFT 588 MS FEEL+PACE"
+        g.drawText (caption, Rect (notesRect().getRight() + 8.f, notesRect().getCentreY() - 6.5f, (filterOn ? split : b.getWidth()) - notesRect().getRight() - 12.f, 14.f), juce::Justification::centredLeft);
 
         // TONE: the filter's response on the latest note at this moment (dashed: where its sweep starts and ends)
         if (filterOn)

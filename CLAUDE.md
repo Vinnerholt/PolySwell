@@ -252,3 +252,6 @@ Slow gear, Reverse tape (MATCH off), Envelope filter, Warble. LEVEL per preset s
 - CURVE moved beside the printed ATTACK label (owner): `CurveSeg`, three pictures of the real shapes (POG2 | SLOW |
   BOWED), lit = active, right-click MIDI learn; the three-way toggle is gone, the footswitch row is LED | ON | MATCH again.
   "Classic" is shown as "Slow" (choice text only; values unchanged).
+- Window LEVEL axes (owner: notes looked "still on the way up" when released): height in dB (36 dB range, the hardest pick's
+  peak at the top; faint lines at -6/-12/-24) and a square-root time axis (the first second gets most of the glass;
+  ticks .25/.5/1/2/4/8 s). POG2 at ATTACK 2 s: -5 dB at 0.5 s now draws ~86 % up instead of 56 %.
