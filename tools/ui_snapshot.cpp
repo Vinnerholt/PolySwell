@@ -255,6 +255,15 @@ int main (int argc, char** argv)
     if (argc > 1 && juce::String (argv[1]) == "--levels") { runLevels(); return 0; }
     if (argc > 1 && juce::String (argv[1]) == "--peaks") { runPeaks(); return 0; }
     if (argc > 1 && juce::String (argv[1]) == "--render") return runRender (argc, argv);
+    if (argc > 2 && juce::String (argv[1]) == "--params")   // every parameter of a factory preset: id=value (to diff user presets)
+    {
+        auto pp = std::make_unique<PolySwellProcessor>();
+        for (int i = 0; i < pp->getNumPrograms(); ++i) if (pp->getProgramName (i) == juce::String (argv[2])) pp->setCurrentProgram (i);
+        for (auto* prm : pp->getParameters())
+            if (auto* r = dynamic_cast<juce::RangedAudioParameter*> (prm))
+                std::printf ("%s=%.6g\n", r->getParameterID().toRawUTF8(), r->convertFrom0to1 (r->getValue()));
+        return 0;
+    }
     if (argc > 1 && juce::String (argv[1]) == "--tapers")   // knob position -> value, to check the POG2 tapers
     {
         auto pp = std::make_unique<PolySwellProcessor>();

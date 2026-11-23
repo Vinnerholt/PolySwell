@@ -24,8 +24,12 @@ namespace
     const std::vector<NewPreset>& newPresets()
     {
         static const std::vector<NewPreset> p {
-            // the main pedal, a gentle swell
-            { "Default", "Default", { { "attack", 150 } } },
+            // the owner's own Default (tuned by ear, saved 2026-11-23): a 2 s POG2 swell with some SUSTAIN, the effect modules
+            // off; their settings are kept so switching a module on brings the owner's values (feedback, slow tremolo, detune)
+            { "Default", "Default", { { "attack", 2066.7f }, { "sustain", 0.423f }, { "filterOn", 0 }, { "freq", 6854 },
+                                      { "feedbackOn", 0 }, { "feedback", 0.386f }, { "fbRise", 0.2f },
+                                      { "motionOn", 0 }, { "tremolo", 0.177f }, { "tremRate", 1.62f }, { "detuneMix", 0.209f },
+                                      { "voiceOn", 0 } } },
             // the pedal reacting to the playing
             { "Default dynamic", "Default", { { "attack", 450 }, { "touch", 0.4f }, { "follow", 0.5f }, { "even", 0.3f }, { "sustain", 0.35f },
                                                { "freq", 5000 }, { "pickFilter", 0.3f },

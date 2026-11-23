@@ -265,3 +265,6 @@ Slow gear, Reverse tape (MATCH off), Envelope filter, Warble. LEVEL per preset s
   1.72 s, i.e. POG2 (21.5 % of ATTACK) PICK < 1 s | SWELL < 3 s | PAD < 8 s | DRONE; BOWED (41 %) 0.52 / 1.57 / 4.2 s;
   SLOW (70.7 %) 0.30 / 0.91 / 2.43 s. The artwork re-bakes when the curve changes (`bakedShape`). Window LEVEL range 54 dB, time axis t^0.65 (sqrt gave the near-silent first ~80 ms of SLOW a fifth of the width).
   `ui_snapshot` also writes curve_slow.png / curve_bowed.png.
+- Factory Default = the owner's saved Default.polyswell (2026-11-23), baked in exactly (`ui_snapshot --params <preset>` prints
+  every parameter of a factory preset; diffed against the file: 0 differences). ATTACK 2.07 s, SUSTAIN 0.42, modules off with
+  the owner's values kept. Owner's level: --peaks -15.5 dBFS on the short test chords (left as tuned).
