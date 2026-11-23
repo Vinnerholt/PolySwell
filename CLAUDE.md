@@ -268,3 +268,10 @@ Slow gear, Reverse tape (MATCH off), Envelope filter, Warble. LEVEL per preset s
 - Factory Default = the owner's saved Default.polyswell (2026-11-23), baked in exactly (`ui_snapshot --params <preset>` prints
   every parameter of a factory preset; diffed against the file: 0 differences). ATTACK 2.07 s, SUSTAIN 0.42, modules off with
   the owner's values kept. Owner's level: --peaks -15.5 dBFS on the short test chords (left as tuned).
+- UX review fixes (2026-11-23): (1) turning TONE switches FILTER on (its onDragStart; the overlay says FILTER OFF / TURN
+  TO USE). (2) LCD shows "name *" when the sound differs from what was loaded / saved (`rememberLoaded` / `isModified`,
+  setup params excluded; a reopened session counts as unchanged); the tag is hidden when it equals the name. (3) The window
+  legend FILTER / FEEDBACK / LAYER / SPACE switches its module (`legendHits`, tooltips via TooltipClient); lit = switch on.
+  (4) The swell-family knob pictures use the live view's scale (`Plot::db`: 54 dB, time^0.65). (5) Plainer words: REAL AMP,
+  LOUDEST WINS, GROWS / INSTANT, VOICES: LEAD, INPUT: FEED / ONLY ABOVE, GATE: HOLD / FADE; a ? button (help mode: tooltips
+  after 40 ms instead of 600; `PolySwellEditor::setHelpMode`; `Chip::arrow`).

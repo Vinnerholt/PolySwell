@@ -85,6 +85,9 @@ public:
     bool loadUserPreset (const juce::File& file);
     juce::String currentPresetName { "Default" };
     bool userPresetLoaded = false;
+    void rememberLoaded();                 // the values as loaded / saved: anything else = changed (the LCD shows *)
+    bool isModified() const;
+    std::vector<float> loadedValues;
 
     // your own body IR (BODY > Load IR...), remembered with the session
     juce::File customIr;

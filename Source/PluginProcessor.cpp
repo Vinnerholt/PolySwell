@@ -248,7 +248,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout PolySwellProcessor::createLa
     l.add (std::make_unique<juce::AudioParameterChoice> (PID { "spreadMode", 1 }, "Spread Mode",
            juce::StringArray { "Alternate", "Random", "By pitch", "By pick strength", "Loud in the middle", "Soft in the middle" }, 0));
     l.add (std::make_unique<juce::AudioParameterChoice> (PID { "fbMode", 1 }, "Feedback Mode",
-           juce::StringArray { "Bloom (amp feedback)", "Immediate (harmonizer)" }, 0));
+           juce::StringArray { "Grows (amp feedback)", "Instant (like an octave pedal)" }, 0));   // were Bloom / Immediate (display only)
 
     l.add (std::make_unique<APF> (PID { "pickFilter", 1 }, "Pick",
            juce::NormalisableRange<float> (-1.f, 1.f, 0.01f), 0.f));
@@ -861,6 +861,23 @@ juce::String PolySwellProcessor::programTag (int i)
 }
 void PolySwellProcessor::applyNewPreset (int index) { setCurrentProgram (index); }
 
+// "changed since loaded": the sound's parameters only (bypass, limiter and low latency belong to the setup)
+static bool isSetupId (const juce::String& id) { return id == "bypass" || id == "limiter" || id == "lowLatency"; }
+void PolySwellProcessor::rememberLoaded()
+{
+    loadedValues.clear();
+    for (auto* prm : getParameters()) loadedValues.push_back (prm->getValue());
+}
+bool PolySwellProcessor::isModified() const
+{
+    const auto& ps = getParameters();
+    if (loadedValues.size() != (size_t) ps.size()) return false;
+    for (int i = 0; i < ps.size(); ++i)
+        if (std::abs (ps[i]->getValue() - loadedValues[(size_t) i]) > 1.0e-4f)
+            if (auto* r = dynamic_cast<juce::RangedAudioParameter*> (ps[i]); r != nullptr && ! isSetupId (r->getParameterID())) return true;
+    return false;
+}
+
 // ---------------------------------------------------------------- MIDI learn
 void PolySwellProcessor::learnCc (const juce::String& id)
 {
@@ -937,6 +954,7 @@ void PolySwellProcessor::setCurrentProgram (int i)
     currentProgram = i;
     currentPresetName = np.name;
     userPresetLoaded = false;
+    rememberLoaded();
 }
 
 // ---------------------------------------------------------------- user presets
@@ -983,6 +1001,7 @@ bool PolySwellProcessor::saveUserPreset (const juce::String& name)
     const auto file = userPresetFolder().getChildFile (clean + ".polyswell");
     if (! xml.writeTo (file)) return false;
     currentPresetName = name.trim(); userPresetLoaded = true;
+    rememberLoaded();
     return true;
 }
 
@@ -1002,6 +1021,7 @@ bool PolySwellProcessor::loadUserPreset (const juce::File& file)
     currentPresetName = xml->getStringAttribute ("name", file.getFileNameWithoutExtension());
     gen2Defaults();
     userPresetLoaded = true;
+    rememberLoaded();
     return true;
 }
 
@@ -1073,6 +1093,7 @@ void PolySwellProcessor::setStateInformation (const void* data, int size)
             apvts.replaceState (vt);
             if (! hasNewFilter) convertOldFilter();
             gen2Defaults();
+            rememberLoaded();   // a reopened session counts as unchanged (no * until something is turned)
         }
 }
 

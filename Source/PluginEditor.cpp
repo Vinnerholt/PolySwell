@@ -563,6 +563,7 @@ struct Chip : juce::Button
         Look::chipFrame (g, b, on, ac, over);
         g.setFont (uiFont (11.5f, true, 0.08f));
         g.setColour (on ? Colour (0xff1f1408) : col::chipText);
+        if (! arrow) { g.drawText (shown(), b, juce::Justification::centred); return; }   // a plain button (e.g. ?)
         g.drawText (shown(), b.withTrimmedLeft (8).withTrimmedRight (mode == toggle ? 6.f : 16.f), juce::Justification::centredLeft);
         if (mode != toggle)
         {
@@ -594,6 +595,7 @@ struct Chip : juce::Button
     Colour ac;
     std::function<void (bool)> onHover;
     const Skin* const* pedalSkin = nullptr;   // set for the chips printed on the pedal
+    bool arrow = true;                        // false: no menu arrow, the text centred
     std::unique_ptr<Bound> bound;
     std::function<String()> textFn;
     std::function<bool()> litFn;
@@ -748,7 +750,7 @@ struct IconButton : juce::Button
 
 struct Lcd : juce::Component, juce::SettableTooltipClient
 {
-    Lcd() { setMouseCursor (juce::MouseCursor::PointingHandCursor); setTooltip ("Preset: click for the list, and to save your own."); }
+    Lcd() { setMouseCursor (juce::MouseCursor::PointingHandCursor); setTooltip ("Preset: click for the list, and to save your own. A * after the name: changed since it was loaded or saved."); }
     void paint (Graphics& g) override
     {
         const auto b = getLocalBounds().toFloat();
@@ -772,7 +774,7 @@ struct Lcd : juce::Component, juce::SettableTooltipClient
 // (rust), the HOLD pad (violet), the SPACE tail (sage) and the LAYER voice (blue core); underneath, the output level
 // against the guitar's own level, with the latest note's swell projected past "now". While a knob or chip is under
 // the mouse, that control's picture instead.
-struct SignalWindow : juce::Component, juce::Timer
+struct SignalWindow : juce::Component, juce::Timer, juce::TooltipClient
 {
     static constexpr int kCols = 105, kB = PolySwellProcessor::kSpecBands, kMaxN = swello::SwelloEngine::kVoicePub;
     static constexpr float kNowFrac = 0.68f, kFLo = 72.f, kFHi = 1500.f, kColSec = 1.f / 30.f;
@@ -782,8 +784,33 @@ struct SignalWindow : juce::Component, juce::Timer
 
     // only the NOTES switch in the top-left corner takes clicks; the rest of the glass lets them through
     Rect notesRect() const { return { 8.f, 4.f, 46.f, 12.f }; }
-    bool hitTest (int x, int y) override { return notesRect().expanded (3.f).contains ((float) x, (float) y); }
-    void mouseDown (const juce::MouseEvent&) override { proc.uiWindowNotes = ! proc.uiWindowNotes; repaint(); }
+    // ... and the legend: FILTER, FEEDBACK, LAYER, SPACE switch their module on and off
+    struct LegendHit { Rect r; const char* id; const char* name; };
+    std::vector<LegendHit> legendHits;
+    const LegendHit* legendAt (juce::Point<float> p) const { for (auto& h : legendHits) if (h.r.contains (p)) return &h; return nullptr; }
+    bool hitTest (int x, int y) override
+    {
+        const juce::Point<float> p ((float) x, (float) y);
+        return notesRect().expanded (3.f).contains (p) || legendAt (p) != nullptr;
+    }
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        if (const auto* h = legendAt (e.position))
+        {
+            if (auto* prm = proc.apvts.getParameter (h->id))
+            { prm->beginChangeGesture(); prm->setValueNotifyingHost (prm->getValue() > 0.5f ? 0.f : 1.f); prm->endChangeGesture(); }
+            repaint();
+            return;
+        }
+        proc.uiWindowNotes = ! proc.uiWindowNotes; repaint();
+    }
+    String getTooltip() override
+    {
+        const auto p = getMouseXYRelative().toFloat();
+        if (const auto* h = legendAt (p)) return String ("Click: switch ") + h->name + " on or off.";
+        if (notesRect().expanded (3.f).contains (p)) return "NOTES: show the notes you play, faint, underneath.";
+        return {};
+    }
 
     // the glow of the window follows the skin (the effects' own colours - filter, feedback, layer ... - stay)
     void setSkin (const Skin& s)
@@ -1014,8 +1041,13 @@ struct SignalWindow : juce::Component, juce::Timer
     struct Plot
     {
         float x0, w, base, h, T = kT, gain = 1.f;
-        float x (float t) const { return x0 + w * t / T; }
-        float y (float a) const { return base - h * juce::jlimit (0.f, 1.06f, a * gain); }
+        bool db = false;   // the live view's scale: height in dB (54 dB), time stretched (t^0.65)
+        float x (float t) const { return x0 + w * (db ? std::pow (juce::jlimit (0.f, 1.f, t / T), 0.65f) : t / T); }
+        float y (float a) const
+        {
+            if (! db) return base - h * juce::jlimit (0.f, 1.06f, a * gain);
+            return base - h * juce::jlimit (0.f, 1.03f, (20.f * std::log10 (a * gain + 1.0e-9f) + 54.f) / 54.f);
+        }
     };
 
     template <typename Fn>
@@ -1061,9 +1093,10 @@ struct SignalWindow : juce::Component, juce::Timer
     static String ms (float sec) { return sec < 1.f ? String (juce::roundToInt (sec * 1000.f)) + " ms" : String (sec, 2) + " s"; }
 
     // the frame for time pictures: a baseline and gridlines at a sensible step for the span shown
-    Plot timeGrid (Graphics& g, Rect b, float T = kT, float gain = 1.f) const
+    Plot timeGrid (Graphics& g, Rect b, float T = kT, float gain = 1.f, bool db = false) const
     {
-        const Plot pl { 14.f, b.getWidth() - 28.f, b.getHeight() - 24.f, b.getHeight() - 50.f, T, gain };
+        Plot pl { 14.f, b.getWidth() - 28.f, b.getHeight() - 24.f, b.getHeight() - 50.f, T, gain };
+        pl.db = db;
         g.setColour (cGlow.withAlpha (0x33 / 255.f)); g.fillRect (pl.x0, pl.base, pl.w, 1.f);
         const float step = T <= 0.6f ? 0.1f : T <= 1.2f ? 0.25f : T <= 2.4f ? 0.5f : 1.f;
         for (int k = 1; (float) k * step < T - 0.02f; ++k)
@@ -1097,7 +1130,7 @@ struct SignalWindow : juce::Component, juce::Timer
             const float hard = A * std::pow (2.f, -tch * 2.f), soft = A * std::pow (2.f, tch * 2.f);
             const float T = juce::jlimit (0.3f, kT, 2.2f * juce::jmax (juce::jmax (hard, soft), A, 0.05f));
             const float pk = peakOf ([&] (float t) { return juce::jmax (swelled (t, hard), swelled (t, soft)); }, T);
-            const Plot pl = timeGrid (g, b, T, 0.95f / pk);
+            const Plot pl = timeGrid (g, b, T, 0.95f / pk, true);
             if (std::abs (tch) < 0.02f)
             {
                 glowLine (g, curve (pl, 0.f, [&] (float t) { return swelled (t, A); }), amberC, &pl);
@@ -1117,7 +1150,7 @@ struct SignalWindow : juce::Component, juce::Timer
             float a[6];
             for (int i = 0; i < 6; ++i) a[i] = i == 0 ? A : pacedAttack (A, on[i] - on[i - 1]);
             const float pk = peakOf ([&] (float t) { float m = 0.f; for (int i = 0; i < 6; ++i) m = juce::jmax (m, swelled (t - on[i], A)); return m; }, kT);
-            const Plot pl = timeGrid (g, b, kT, 0.95f / pk);
+            const Plot pl = timeGrid (g, b, kT, 0.95f / pk, true);
             for (int i = 0; i < 6; ++i)
             {
                 const float o = on[i];
@@ -1134,7 +1167,7 @@ struct SignalWindow : juce::Component, juce::Timer
             const float e = P ("even");
             const float amp[2] = { 0.42f, 1.f }, on[2] = { 0.f, 1.7f };
             const float pkE = peakOf ([&] (float t) { float m = 0.f; for (int i = 0; i < 2; ++i) m = juce::jmax (m, juce::jmax (amp[i] * natural (t - on[i]), (amp[i] + (0.72f - amp[i]) * e) * swelled (t - on[i], A))); return m; }, kT);
-            const Plot pl = timeGrid (g, b, kT, 0.95f / juce::jmax (1.f, pkE));
+            const Plot pl = timeGrid (g, b, kT, 0.95f / juce::jmax (1.f, pkE), true);
             for (int i = 0; i < 2; ++i)
             {
                 const float o = on[i], av = amp[i], lev = av + (0.72f - av) * e;
@@ -1149,7 +1182,7 @@ struct SignalWindow : juce::Component, juce::Timer
         // own make-up gain lifts a long swell above the guitar's pick, as the pedal measured)
         const float volG = id == "vol" ? juce::jmax (1.f, juce::Decibels::decibelsToGain (P ("vol"))) : 1.f;
         const float pkAll = peakOf ([&] (float t) { return juce::jmax (natural (t), volG * swelled (t, A)); }, kT);
-        const Plot pl = timeGrid (g, b, kT, 0.95f / juce::jmax (1.f, pkAll));
+        const Plot pl = timeGrid (g, b, kT, 0.95f / juce::jmax (1.f, pkAll), true);
         dashed (g, curve (pl, 0.f, [] (float t) { return natural (t); }), guitarC.withAlpha (0.6f));
         tag (g, "GUITAR", pl.x (0.f) + 18.f, pl.y (0.9f), guitarC.withAlpha (0.85f));
         const float vol = id == "vol" ? juce::Decibels::decibelsToGain (P ("vol")) : 1.f;
@@ -1844,9 +1877,11 @@ struct SignalWindow : juce::Component, juce::Timer
         }
 
         // what is shaping the sound: lit when in use
-        struct Item { const char* s; Colour c; bool lit; };
-        const Item items[] = { { "SWELL", amberC, ! lastByp }, { "FILTER", teal, filterOn }, { "FEEDBACK", rust, fbOn },
-                               { "LAYER", blue, layerOn }, { "SPACE", sage, spaceOn } };
+        struct Item { const char* s; Colour c; bool lit; const char* id; };
+        const Item items[] = { { "SWELL", amberC, ! lastByp, nullptr }, { "FILTER", teal, on ("filterOn"), "filterOn" },
+                               { "FEEDBACK", rust, on ("feedbackOn"), "feedbackOn" }, { "LAYER", blue, on ("voiceOn"), "voiceOn" },
+                               { "SPACE", sage, on ("smearOn"), "smearOn" } };
+        legendHits.clear();
         const auto lf = uiFont (9.f, true, 0.06f);
         g.setFont (lf);
         float tw = 0.f;
@@ -1859,6 +1894,7 @@ struct SignalWindow : juce::Component, juce::Timer
             g.setColour (it.c.withAlpha (a)); g.fillEllipse (lx, ly - 2.5f, 5.f, 5.f);
             const float w = juce::GlyphArrangement::getStringWidth (lf, it.s);
             g.drawText (it.s, Rect (lx + 8.f, ly - 6.f, w + 4.f, 12.f), juce::Justification::centredLeft);
+            if (it.id != nullptr) legendHits.push_back ({ Rect (lx - 3.f, ly - 8.f, w + 16.f, 16.f), it.id, it.s });
             lx += w + 8.f + gapL;
         }
 
@@ -2382,6 +2418,11 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         saveC->mode = Chip::toggle; saveC->litFn = [] { return false; };
         saveC->setSize (saveC->idealWidth(), 22);
         saveC->onPress = [this] { savePreset(); };
+        helpC = chip (Chip::custom, "", "?", col::amber, "Help: while lit, hover any control and its explanation shows at once.", barOnly);
+        helpC->textFn = [] { return String ("?"); };
+        helpC->litFn = [this] { return helpMode; };
+        helpC->setSize (26, 22); helpC->arrow = false;
+        helpC->onPress = [this] { helpMode = ! helpMode; editor.setHelpMode (helpMode); helpC->repaint(); };
         skinC = chip (Chip::custom, "", "SKIN", col::amber, "Skin: the pedal's plate and colours (Sunburst, Lagoon, Midnight).", barOnly);
         skinC->textFn = [this] { return "SKIN " + String (skinAt (proc.uiSkin).name).toUpperCase(); };
         skinC->setSize (176, 22);
@@ -2415,6 +2456,7 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
             abC[1]->setTopLeftPosition (right - 168, y); abC[0]->setTopLeftPosition (right - 196, y);
             skinC->setTopLeftPosition (right - 196 - 10 - skinC->getWidth(), y);
             saveC->setTopLeftPosition (54 + lcdW + 44, y);
+            helpC->setTopLeftPosition (saveC->getRight() + 8, y);
         }
     }
 
@@ -2430,7 +2472,12 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         const char* bid[3] = { "attack", "sustain", "freq" }; const char* bn[3] = { "ATTACK", "SUSTAIN", "TONE" };
         for (int i = 0; i < 3; ++i)
         {
-            knob (bid[i], bn[i], 0, px + bx[i], py + 276, col::amber, g, bsz[i]);
+            auto* bigKnob = knob (bid[i], bn[i], 0, px + bx[i], py + 276, col::amber, g, bsz[i]);
+            if (i == 2)   // TONE with the filter off: turning it switches the filter on
+            {
+                auto prev = bigKnob->onDragStart;
+                bigKnob->onDragStart = [this, prev] { if (getParam ("filterOn") < 0.5f) setParam ("filterOn", 1.f); if (prev) prev(); };
+            }
             label (bn[i], { px + bx[i] - 60 - (i == 0 ? 10.f : 0.f), py + (i == 1 ? 306.f : 327.f), 120, 16 }, i == 1 ? 10.5f : 13.f, col::ink, juce::Justification::centred, true, 0.18f);
         }
         // row 2 in two printed groups: how the swell follows your playing | what comes out
@@ -2529,8 +2576,8 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         }
         // FEEDBACK
         knobRow (1, { { "feedback", "FEEDBACK" }, { "fbDistance", "DISTANCE" }, { "fbRise", "RISE" }, { "fbTone", "TONE" } });
-        flow ({ chip (Chip::toggle, "fbAmp", "AMP", kMods[1].ac, "AMP: the amp-in-the-room model. DISTANCE picks the harmonic, it takes over from the note, muting the string stops it.", g),
-                chip (Chip::toggle, "fbOneWins", "ONE WINS", kMods[1].ac, "ONE WINS: in a chord the loudest note takes most of the feedback, as in a real amp.", g),
+        flow ({ chip (Chip::toggle, "fbAmp", "REAL AMP", kMods[1].ac, "REAL AMP: the amp-in-the-room model. DISTANCE picks the harmonic, it takes over from the note, muting the string stops it.", g),
+                chip (Chip::toggle, "fbOneWins", "LOUDEST WINS", kMods[1].ac, "LOUDEST WINS: in a chord the loudest note takes most of the feedback, as in a real amp.", g),
                 chip (Chip::menu, "fbMode", "", kMods[1].ac, "Bloom: the feedback grows on held notes. Immediate: an overtone from the pick, like an octave pedal.", g) },
               rowX (1), rowY (1, 0));
         // MOTION: VIBRATO | TREMOLO on top (each knob with its settings beside it), SPREAD | DETUNE below
@@ -2597,10 +2644,10 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
             auto* oct = segs.add (new Seg (proc, "voiceOct", { { "-1", 0 }, { "0", 1 }, { "+1", 2 } }, ac));
             oct->setTooltip ("The voice's octave.");
             oct->setSize (oct->idealWidth(), 22); addAndMakeVisible (oct); g.add (oct);
-            auto* mono = chip (Chip::toggle, "voiceMono", "MONO", ac, "Mono: only the newest note keeps its voice (for lead lines).", g);
+            auto* mono = chip (Chip::toggle, "voiceMono", "LEAD", ac, "LEAD: only the newest note keeps its voice (mono, for lead lines). Off: every note gets one.", g);
             const float ry = r.getY() + 136.f;
             named (oct, "OCTAVE", r.getX() + 14.f + (float) oct->getWidth() * 0.5f, ry);
-            named (mono, "PLAY", r.getX() + 14.f + (float) oct->getWidth() + 12.f + (float) mono->getWidth() * 0.5f, ry);
+            named (mono, "VOICES", r.getX() + 14.f + (float) oct->getWidth() + 12.f + (float) mono->getWidth() * 0.5f, ry);
             auto* uni = knobs.add (new Knob (proc, *this, "voiceUnison", "UNISON", 4, ac));
             uni->setSize (150, 22); addAndMakeVisible (uni); g.add (uni);
             named (uni, "UNISON", r.getX() + 318.f - 75.f, ry);
@@ -2623,21 +2670,21 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
             const float lx = r.getX() + 10.f, rx = lx + bw + 4.f;
             subBoxes.push_back ({ Rect (lx, by, bw, bh), ac });
             subBoxes.push_back ({ Rect (rx, by, bw, bh), ac });
-            label ("IN", { lx + 8.f, by + 4.f, 40.f, 12.f }, 10.f, col::chipText, juce::Justification::centredLeft, true, 0.2f);
+            label ("INPUT", { lx + 8.f, by + 4.f, 50.f, 12.f }, 10.f, col::chipText, juce::Justification::centredLeft, true, 0.2f);
             label ("GATE", { rx + 8.f, by + 4.f, 60.f, 12.f }, 10.f, col::chipText, juce::Justification::centredLeft, true, 0.2f);
             auto* send = chip (Chip::menu, "smearSend", "", ac, "What feeds the reverb: always, following the swell, or an expression pedal.", g);
             send->setSize (juce::jmin (send->getWidth(), (int) bw - 16), 22);
             auto* thr = valueChip ("smearThresh", "", 0, ac, g);
             auto* dark = chip (Chip::toggle, "smearDark", "DARK", ac, "A darker reverb.", g);
-            named (send, "SEND", lx + bw * 0.5f, by + 27.f);
-            named (thr, "THRESHOLD", lx + bw * 0.5f, by + 61.f);
+            named (send, "FEED", lx + bw * 0.5f, by + 27.f);
+            named (thr, "ONLY ABOVE", lx + bw * 0.5f, by + 61.f);
             dark->setTopLeftPosition (juce::roundToInt (lx + bw - 8.f - (float) dark->getWidth()), juce::roundToInt (by + 2.f));
             auto* gate = chip (Chip::toggle, "smearGate", "ON", ac, "Gate: the reverb is cut shortly after you stop playing.", g);
             gateHold = valueChip ("smearHold", "", 0, ac, g);
             gateCut  = valueChip ("smearCut", "", 0, ac, g);
             gate->setTopLeftPosition (juce::roundToInt (rx + bw - 8.f - (float) gate->getWidth()), juce::roundToInt (by + 2.f));
             named (gateHold, "HOLD", rx + bw * 0.5f, by + 27.f);
-            named (gateCut, "CUT", rx + bw * 0.5f, by + 61.f);
+            named (gateCut, "FADE", rx + bw * 0.5f, by + 61.f);
         }
     }
 
@@ -2825,9 +2872,10 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
     void timerCallback() override
     {
         if (! juce::ModifierKeys::currentModifiers.isAnyMouseButtonDown()) proc.undo.beginNewTransaction();
-        const String name = proc.currentPresetName;
+        const String name = proc.currentPresetName + (proc.isModified() ? " *" : "");   // * = changed since loaded / saved
         if (name != lcd.text) { lcd.text = name; lcd.repaint(); }
-        const String num = proc.userPresetLoaded ? String ("USER") : PolySwellProcessor::programTag (proc.getCurrentProgram()).toUpperCase();
+        String num = proc.userPresetLoaded ? String ("USER") : PolySwellProcessor::programTag (proc.getCurrentProgram()).toUpperCase();
+        if (num.equalsIgnoreCase (proc.currentPresetName)) num = {};   // "Default  DEFAULT" said it twice
         if (num != lcd.right) { lcd.right = num; lcd.repaint(); }
         undoB.setEnabled (proc.undo.canUndo()); redoB.setEnabled (proc.undo.canRedo());
         int mask = 0;
@@ -3088,7 +3136,9 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
             g.fillEllipse (kPedalX + 308 - 38, kPedalY + 276 - 38, 76, 76);
             g.setColour (sk.body1);
             g.setFont (uiFont (10.f, true, 0.12f));
-            g.drawText ("FILTER OFF", Rect (kPedalX + 308 - 60, kPedalY + 276 - 8, 120, 16), juce::Justification::centred);
+            g.drawText ("FILTER OFF", Rect (kPedalX + 308 - 60, kPedalY + 276 - 12, 120, 16), juce::Justification::centred);
+            g.setFont (uiFont (8.f, true, 0.1f));
+            g.drawText ("TURN TO USE", Rect (kPedalX + 308 - 60, kPedalY + 276 + 2, 120, 12), juce::Justification::centred);
         }
     }
 
@@ -3107,7 +3157,7 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
                gearB { IconButton::gear, "Settings: re-pick, limiter, low latency, MIDI out, window size" },
                panelB { IconButton::panel, "Show or hide the effects panel" };
     Lcd lcd;
-    Chip* saveC = nullptr; Chip* skinC = nullptr; juce::Component* bodyMixC = nullptr;
+    Chip* saveC = nullptr; Chip* skinC = nullptr; Chip* helpC = nullptr; bool helpMode = false; juce::Component* bodyMixC = nullptr;
     const Skin* currentSkin = nullptr; Chip* abC[2] { nullptr, nullptr }; Chip* bodyC = nullptr;
     Led onLed { proc, "bypass", true, "Lit while the pedal is on." };
     FootSwitch onSw;
@@ -3165,6 +3215,7 @@ void PolySwellEditor::setPanelOpen (bool open)
 void PolySwellEditor::showKnobView (const juce::String& paramId, bool on) { board->showKnobView (paramId, on); }
 
 void PolySwellEditor::setSkin (int index) { board->applySkin (index); }
+void PolySwellEditor::setHelpMode (bool on) { tooltips.setMillisecondsBeforeTipAppears (on ? 40 : 600); }
 
 void PolySwellEditor::setUiScale (float scale)
 {
