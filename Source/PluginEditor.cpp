@@ -681,7 +681,8 @@ struct Led : juce::Button
     void paintButton (Graphics& g, bool, bool) override
     { drawLed (g, getLocalBounds().toFloat(), on(), (pedalSkin != nullptr && *pedalSkin != nullptr) ? (*pedalSkin)->led : Colour (0xffffb030)); }
     const Skin* const* pedalSkin = nullptr;
-    void clicked() override { bound.set (bound.value > 0.5f ? 0.f : 1.f); }
+    void clicked() override { bound.set (bound.value > 0.5f ? 0.f : 1.f); if (onUserToggle) onUserToggle(); }
+    std::function<void()> onUserToggle;   // a module LED clicked by hand
     bool invert;
     Bound bound;
 };
@@ -784,14 +785,16 @@ struct SignalWindow : juce::Component, juce::Timer, juce::TooltipClient
 
     // only the NOTES switch in the top-left corner takes clicks; the rest of the glass lets them through
     Rect notesRect() const { return { 8.f, 4.f, 46.f, 12.f }; }
+    Rect meterRect() const { return { 0.f, 20.f, 11.f, (float) getHeight() - 38.f }; }
     // ... and the legend: FILTER, FEEDBACK, LAYER, SPACE switch their module on and off
     struct LegendHit { Rect r; const char* id; const char* name; };
+    std::function<void (const char*)> onModuleSwitched;   // the board makes sure a module switched on is heard
     std::vector<LegendHit> legendHits;
     const LegendHit* legendAt (juce::Point<float> p) const { for (auto& h : legendHits) if (h.r.contains (p)) return &h; return nullptr; }
     bool hitTest (int x, int y) override
     {
         const juce::Point<float> p ((float) x, (float) y);
-        return notesRect().expanded (3.f).contains (p) || legendAt (p) != nullptr;
+        return notesRect().expanded (3.f).contains (p) || legendAt (p) != nullptr || meterRect().contains (p);
     }
     void mouseDown (const juce::MouseEvent& e) override
     {
@@ -799,6 +802,7 @@ struct SignalWindow : juce::Component, juce::Timer, juce::TooltipClient
         {
             if (auto* prm = proc.apvts.getParameter (h->id))
             { prm->beginChangeGesture(); prm->setValueNotifyingHost (prm->getValue() > 0.5f ? 0.f : 1.f); prm->endChangeGesture(); }
+            if (onModuleSwitched) onModuleSwitched (h->id);
             repaint();
             return;
         }
@@ -809,6 +813,7 @@ struct SignalWindow : juce::Component, juce::Timer, juce::TooltipClient
         const auto p = getMouseXYRelative().toFloat();
         if (const auto* h = legendAt (p)) return String ("Click: switch ") + h->name + " on or off.";
         if (notesRect().expanded (3.f).contains (p)) return "NOTES: show the notes you play, faint, underneath.";
+        if (meterRect().contains (p)) return "IN: your guitar's level. Play so it reaches the marked zone: quieter, notes are tracked less surely; red, it is too hot.";
         return {};
     }
 
@@ -1900,13 +1905,13 @@ struct SignalWindow : juce::Component, juce::Timer, juce::TooltipClient
 
         // input level: a thin bar on the glass's left edge, the zone where the tracking works best marked
         {
-            const float mx = 5.f, y0 = 24.f, y1 = b.getHeight() - 22.f;
+            const float mx = 4.f, y0 = 24.f, y1 = b.getHeight() - 22.f;   // 4 px wide (was 2)
             auto mY = [&] (float db) { return y1 - juce::jlimit (0.f, 1.f, (db + 60.f) / 60.f) * (y1 - y0); };
-            g.setColour (juce::Colours::black.withAlpha (0.55f)); g.fillRoundedRectangle (mx - 1.f, y0 - 1.f, 4.f, y1 - y0 + 2.f, 1.5f);
-            g.setColour (pale.withAlpha (0.16f)); g.fillRect (mx, mY (-6.f), 2.f, mY (-24.f) - mY (-6.f));
+            g.setColour (juce::Colours::black.withAlpha (0.55f)); g.fillRoundedRectangle (mx - 1.f, y0 - 1.f, 6.f, y1 - y0 + 2.f, 2.f);
+            g.setColour (pale.withAlpha (0.2f)); g.fillRect (mx, mY (-6.f), 4.f, mY (-24.f) - mY (-6.f));
             g.setColour (meterDb > -3.f ? rust : meterDb < -30.f ? amberC.withAlpha (0.55f) : amberC);
-            if (meterDb > -60.f) g.fillRect (mx, mY (meterDb), 2.f, y1 - mY (meterDb));
-            if (peakDb > -60.f) { g.setColour (peakDb > -3.f ? rust : pale); g.fillRect (mx - 1.f, mY (peakDb) - 0.5f, 4.f, 1.5f); }
+            if (meterDb > -60.f) g.fillRect (mx, mY (meterDb), 4.f, y1 - mY (meterDb));
+            if (peakDb > -60.f) { g.setColour (peakDb > -3.f ? rust : pale); g.fillRect (mx - 1.f, mY (peakDb) - 0.5f, 6.f, 1.5f); }
         }
     }
 
@@ -2305,6 +2310,8 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         buildBar();
         buildPedal();
         buildPanel();
+        listenToPanelControls();
+        window.onModuleSwitched = [this] (const char* id) { wakeModule (id); };
         setPanelVisible (proc.uiPedalsOpen);
         applySkin (proc.uiSkin);
         startTimerHz (15);
@@ -2507,7 +2514,7 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         label ("ON", { px + 128 - 20, py + 592, 40, 14 }, 12.f, col::ink, juce::Justification::centred, true, 0.18f);
         // CURVE: three pictures beside the printed ATTACK label (the curve belongs to ATTACK): POG2 (default), SLOW, BOWED
         curveSeg = std::make_unique<CurveSeg> (proc, &currentSkin);
-        curveSeg->setBounds (juce::roundToInt (px + 104), juce::roundToInt (py + 328), 60, 16);   // clear of SUSTAIN's label
+        curveSeg->setBounds (juce::roundToInt (px + 103), juce::roundToInt (py + 327), 69, 19);   // clear of SUSTAIN's label
         static_cast<CurveSeg*> (curveSeg.get())->onMenu = [this] { midiMenu ("swellShape", *curveSeg); };
         addAndMakeVisible (*curveSeg);
         // MATCH: a mini toggle mirroring the LED on the other side of the footswitch
@@ -2540,7 +2547,7 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         // a setting with its name above it (used in the boxed modules)
         auto named = [&] (juce::Component* c, const String& name, float cx, float y)
         {
-            label (name, { cx - 40.f, y, 80.f, 11.f }, 9.f, col::dimText, juce::Justification::centred, true, 0.16f);
+            label (name, { cx - 40.f, y - 1.f, 80.f, 12.f }, 10.f, col::dimText, juce::Justification::centred, true, 0.14f);
             c->setTopLeftPosition (juce::roundToInt (cx - (float) c->getWidth() * 0.5f), juce::roundToInt (y + 12.f));
         };
         auto rowX = [] (int mod) { return moduleRect (mod).getX() + 14.f; };
@@ -2550,6 +2557,7 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
             if (i == 4) continue;   // unused slot (was HOLD)
             const auto r = moduleRect (i);
             Led* l = leds.add (new Led (proc, kMods[i].onId, false, String (kMods[i].title) + ": click to switch this module on or off."));
+            l->onUserToggle = [this, id = kMods[i].onId] { wakeModule (id); };
             l->setBounds (juce::roundToInt (r.getX() + 8), juce::roundToInt (r.getY() + 8), 26, 24);
             addAndMakeVisible (l); g.add (l);
             label (kMods[i].title, { r.getX() + 62, r.getY() + 10, 120, 20 }, 16.f, kMods[i].ac.interpolatedWith (col::cream, 0.4f), juce::Justification::centredLeft, true, 0.2f);
@@ -2686,6 +2694,34 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
             named (gateHold, "HOLD", rx + bw * 0.5f, by + 27.f);
             named (gateCut, "FADE", rx + bw * 0.5f, by + 61.f);
         }
+    }
+
+    // a module switched on by hand starts audible: an amount left at zero gets a modest value (stored values are kept)
+    void wakeModule (const char* id)
+    {
+        if (getParam (id) < 0.5f) return;
+        const String m (id);
+        if (m == "feedbackOn" && getParam ("feedback") < 0.001f) setParam ("feedback", 0.3f);
+        else if (m == "voiceOn" && getParam ("voiceMix") < 0.001f) setParam ("voiceMix", 0.3f);
+        else if (m == "smearOn" && getParam ("smearLevel") < 0.001f) setParam ("smearLevel", 0.4f);
+        else if (m == "motionOn" && getParam ("vibDepth") < 0.01f && getParam ("tremolo") < 0.001f && getParam ("spread") < 0.001f
+                 && getParam ("detuneMix") < 0.001f) setParam ("vibDepth", 8.f);
+    }
+
+    // ---------- 1. a control touched in a module that is off switches the module on (it would otherwise do nothing)
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        if (e.eventComponent == this || e.eventComponent == nullptr || e.mods.isPopupMenu()) return;
+        const auto c = e.eventComponent->getBounds().getCentre().toFloat();
+        for (int i = 0; i < 6; ++i)
+            if (i != 4 && kMods[i].onId != nullptr && moduleRect (i).contains (c) && getParam (kMods[i].onId) < 0.5f)
+            { setParam (kMods[i].onId, 1.f); wakeModule (kMods[i].onId); }
+    }
+
+    void listenToPanelControls()
+    {
+        for (auto* c : panelOnly)
+            if (dynamic_cast<Led*> (c) == nullptr) c->addMouseListener (this, false);
     }
 
     void setPanelVisible (bool open)
@@ -2957,10 +2993,10 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
                 auto at = [&] (float ang, float r) { return juce::Point<float> (cx + r * std::sin (ang), cy - r * std::cos (ang)); };
                 g.setColour (sk.ink.withAlpha (0.6f));
                 for (float v : borders) { const float a = angOf (v); g.drawLine (juce::Line<float> (at (a, 44.5f), at (a, 48.5f)), 1.2f); }
-                const auto f = uiFont (8.f, true, 0.16f);
+                const auto f = uiFont (9.5f, true, 0.14f);   // was 8 (owner: small at 100 %)
                 g.setFont (f);
-                g.setColour (sk.ink.withAlpha (0.8f));
-                const float r = 52.f;   // the words outside the ticks and the dot
+                g.setColour (sk.ink.withAlpha (0.85f));
+                const float r = 53.5f;   // the words outside the ticks and the dot
                 for (auto& z : words)
                 {
                     const String txt (z.word);

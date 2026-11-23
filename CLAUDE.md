@@ -275,3 +275,8 @@ Slow gear, Reverse tape (MATCH off), Envelope filter, Warble. LEVEL per preset s
   (4) The swell-family knob pictures use the live view's scale (`Plot::db`: 54 dB, time^0.65). (5) Plainer words: REAL AMP,
   LOUDEST WINS, GROWS / INSTANT, VOICES: LEAD, INPUT: FEED / ONLY ABOVE, GATE: HOLD / FADE; a ? button (help mode: tooltips
   after 40 ms instead of 600; `PolySwellEditor::setHelpMode`; `Chip::arrow`).
+- UX round 2: touching any control in a switched-off module switches it on (Board listens to the panel controls,
+  `listenToPanelControls` / `mouseDown`; module LEDs excluded). A module switched on by hand (its LED or the window legend)
+  is never silent: `wakeModule` sets FEEDBACK 0.3 / LAYER MIX 0.3 / SPACE LEVEL 0.4 / MOTION vibrato 8 c when its amount is 0
+  (presets loading are not affected). Input meter 4 px with a tooltip (`meterRect`). Zone words 9.5 px, curve pictures
+  69 x 19, panel setting names 10 px.
