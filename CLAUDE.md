@@ -230,8 +230,14 @@ rings (outer = lightest). Switch: SKIN chip in the top bar or gear > Skin; saved
   POG2 swell LEVEL +5, Warm pad +3.
 
 ## TODO (owner)
-- Pass through all ten presets by ear: after the POG2 gain removal and MATCH-by-default, most ATTACK times (and some
-  LEVELs) probably need adjusting.
+- Owner tunes the 13 baseline presets (2026-11-23) by ear and saves each under its own name (SAVE -> Documents\PolySwell  Presets\*.polyswell); then read those files and bake them into `newPresets()`. Owner expects longer attacks overall
+  (Default's 150 ms is a first try).
 - 2.0.1: Lagoon and Midnight logos recoloured from the Sunburst logo with Sunburst's soft steps mapped to light blue
   (212 deg) -> indigo (242 deg) (no turquoise); their rings/stripes #699bd6 / #5466ce / #4435c0, Lagoon's window blue,
   Midnight navy knobs with cream pointers.
+
+## Presets, round 2 (2026-11-23): baselines for the owner to tune
+13 presets in `newPresets()`, tags Default / Lead / Pad / Feedback / Effect (the preset menu has an Effect section):
+Default (ATTACK 150 ms only), Default dynamic, Smooth lead, Violin, Gated VG (the mk.gee kind: VG pad voice, driven gated
+reverb, detune; not named after the artist, the plugin is public), Ambient pad, Glass shimmer, POG2, Amp in the room,
+Slow gear, Reverse tape (MATCH off), Envelope filter, Warble. LEVEL per preset so `--peaks` sits at -7..-10 dBFS (input -9).

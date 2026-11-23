@@ -2577,7 +2577,7 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
     void presetMenu()
     {
         juce::PopupMenu m;
-        for (auto* tag : { "Default", "Lead", "Pad", "Feedback" })
+        for (auto* tag : { "Default", "Lead", "Pad", "Feedback", "Effect" })
         {
             m.addSectionHeader (tag);
             for (int i = 0; i < proc.getNumPrograms(); ++i)

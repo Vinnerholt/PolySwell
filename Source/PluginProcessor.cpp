@@ -19,31 +19,56 @@ namespace
             { "smearOn", 0 }, { "voiceMix", 0 }, { "detuneMix", 0 }, { "detune", 10.1f } };
         return d;
     }
+    // Baselines for the owner to tune by ear (2026-11-23); MATCH is on in all unless listed. vibTarget: 0 voice,
+    // 1 guitar + voice, 2 guitar. voiceWave: 0 supersaw 1 saw 2 PWM 3 square 4 organ 5 glass 6 reed 7 pad (VG) 8 bow.
     const std::vector<NewPreset>& newPresets()
     {
         static const std::vector<NewPreset> p {
-            { "Default", "Default", {} },
-            { "Default dynamic", "Default", { { "attack", 400 }, { "sustain", 0.35f }, { "touch", 0.35f }, { "follow", 0.45f }, { "even", 0.25f },
-                                               { "freq", 3500 }, { "mod", 0.2f }, { "res", 0.15f }, { "pickFilter", 0.35f },
-                                               { "feedback", 0.25f }, { "fbDistance", 0.3f }, { "fbRise", 1.4f } } },
-            { "Singing lead", "Lead", { { "attack", 180 }, { "sustain", 0.6f }, { "smoothRepick", 1 }, { "touch", 0.3f }, { "follow", 0.4f }, { "freq", 5000 },
-                                        { "feedback", 0.3f }, { "fbDistance", 0.3f }, { "fbRise", 1.6f },
-                                        { "vibDepth", 10 }, { "vibDelay", 0.35f }, { "vibTarget", 2 }, { "vibHuman", 1 } } },
-            { "Violin lead", "Lead", { { "attack", 350 }, { "smoothRepick", 1 }, { "even", 0.4f }, { "sustain", 0.4f },
-                                       { "freq", 6000 }, { "mod", 0.15f }, { "slope", 0 }, { "bowedBody", 1 },
-                                       { "vibDepth", 14 }, { "vibDelay", 0.35f }, { "vibRate", 5 }, { "vibTarget", 2 }, { "vibHuman", 1 } } },
-            { "Slow bloom lead", "Lead", { { "attack", 600 }, { "sustain", 0.7f }, { "follow", 0.5f }, { "feedback", 0.5f }, { "fbDistance", 0.28f },
-                                           { "fbRise", 1.2f }, { "smearOn", 1 }, { "smearLevel", 0.3f }, { "smearSize", 0.45f }, { "smearSend", 1 } } },
-            // the owner's POG2 setting (run G1), fitted by rendering the test file (tools/pog2_compare.py): ATTACK 2 s,
-            // 18 dB/oct at 1 kHz, the +-10 cent copies 15..19 dB under the note (MIX 0.39). Held notes ~2 dB, plucks ~4 dB.
-            { "POG2 swell", "Pad", { { "attack", 2000 }, { "vol", 5.f }, { "freq", 1000 }, { "detune", 10.1f }, { "detuneMix", 0.39f } } },
-            { "Warm pad", "Pad", { { "attack", 1200 }, { "vol", 3.f }, { "sustain", 0.8f }, { "freq", 1800 }, { "mod", 0.4f }, { "res", 0.15f },
-                                   { "spread", 0.6f }, { "detuneMix", 0.5f }, { "smearOn", 1 }, { "smearSize", 0.7f }, { "smearLevel", 0.5f }, { "smearSend", 1 } } },
-            { "Glass pad", "Pad", { { "attack", 900 }, { "sustain", 0.6f }, { "voiceMix", 0.4f }, { "voiceWave", 5 }, { "voiceOct", 2 }, { "voiceTone", 5000 },
-                                    { "voiceUnison", 0.3f }, { "spread", 0.5f }, { "smearOn", 1 }, { "smearSize", 0.65f }, { "smearLevel", 0.45f } } },
-            { "Amp in the room", "Feedback", { { "attack", 80 }, { "sustain", 0.5f }, { "feedback", 0.8f }, { "fbDistance", 0.3f }, { "fbRise", 1.2f }, { "fbTone", 1600 }, { "dry", 0.3f } } },
-            { "Slow howl", "Feedback", { { "attack", 400 }, { "sustain", 0.7f }, { "feedback", 0.7f }, { "fbDistance", 0.55f }, { "fbRise", 2.5f }, { "fbTone", 1300 },
-                                         { "smearOn", 1 }, { "smearSize", 0.6f }, { "smearLevel", 0.35f } } } };
+            // the main pedal, a gentle swell
+            { "Default", "Default", { { "attack", 150 } } },
+            // the pedal reacting to the playing
+            { "Default dynamic", "Default", { { "attack", 450 }, { "touch", 0.4f }, { "follow", 0.5f }, { "even", 0.3f }, { "sustain", 0.35f },
+                                               { "freq", 5000 }, { "pickFilter", 0.3f },
+                                               { "feedback", 0.2f }, { "fbDistance", 0.3f }, { "fbRise", 1.5f } } },
+            // rolled-off highs, a little dynamic, a saw voice gliding under it, vibrato that sets in late
+            { "Smooth lead", "Lead", { { "attack", 350 }, { "sustain", 0.55f }, { "touch", 0.3f }, { "follow", 0.35f }, { "even", 0.25f },
+                                       { "freq", 2800 }, { "res", 0.1f }, { "pickFilter", 0.2f },
+                                       { "voiceMix", 0.25f }, { "voiceWave", 1 }, { "voiceTone", 2500 }, { "voiceGlide", 0.06f }, { "voiceMono", 1 }, { "voiceCharacter", 0.3f },
+                                       { "vibDepth", 8 }, { "vibRate", 5.2f }, { "vibDelay", 0.4f }, { "vibTarget", 1 }, { "vibHuman", 1 },
+                                       { "smearOn", 1 }, { "smearSize", 0.45f }, { "smearLevel", 0.25f } } },
+            // bowed attack, a violin body, singing vibrato
+            { "Violin", "Lead", { { "attack", 400 }, { "even", 0.5f }, { "sustain", 0.45f }, { "smoothRepick", 1 },
+                                  { "slope", 0 }, { "freq", 6000 }, { "mod", 0.15f }, { "bodyIr", 1 }, { "bodyMix", 0.8f },
+                                  { "voiceMix", 0.35f }, { "voiceWave", 1 }, { "voiceGlide", 0.05f }, { "voiceMono", 1 },
+                                  { "vibDepth", 14 }, { "vibDelay", 0.35f }, { "vibTarget", 1 }, { "vibHuman", 1 } } },
+            // the VG-8 bowed pad under the guitar, a driven gated reverb, a little chorus-like detune (the mk.gee kind of sound)
+            { "Gated VG", "Lead", { { "vol", -4.5f }, { "attack", 400 }, { "sustain", 0.4f }, { "even", 0.3f }, { "dry", 0.15f }, { "freq", 4000 },
+                                    { "voiceMix", 0.45f }, { "voiceWave", 7 }, { "voiceTone", 4000 }, { "voiceCharacter", 0.5f }, { "voiceUnison", 0.2f },
+                                    { "detuneMix", 0.3f }, { "vibDepth", 5 }, { "vibRate", 4.5f }, { "vibTarget", 2 },
+                                    { "smearOn", 1 }, { "smearSize", 0.55f }, { "smearLevel", 0.5f }, { "smearDrive", 0.5f },
+                                    { "smearGate", 1 }, { "smearHold", 150 }, { "smearCut", 40 } } },
+            // slow, wide, a pad voice under it, the reverb blooming with the swell
+            { "Ambient pad", "Pad", { { "vol", 4.5f }, { "attack", 2500 }, { "sustain", 0.8f }, { "even", 0.4f }, { "freq", 2200 }, { "mod", 0.25f },
+                                      { "voiceMix", 0.4f }, { "voiceWave", 7 }, { "voiceTone", 3000 }, { "voiceUnison", 0.4f }, { "voiceCharacter", 0.3f },
+                                      { "spread", 0.6f }, { "detuneMix", 0.35f },
+                                      { "smearOn", 1 }, { "smearSize", 0.8f }, { "smearLevel", 0.55f }, { "smearSend", 1 }, { "smearDark", 1 } } },
+            // a bell-like voice an octave up, a big space
+            { "Glass shimmer", "Pad", { { "attack", 1400 }, { "sustain", 0.6f }, { "voiceMix", 0.45f }, { "voiceWave", 5 }, { "voiceOct", 2 }, { "voiceUnison", 0.3f },
+                                        { "spread", 0.5f }, { "smearOn", 1 }, { "smearSize", 0.75f }, { "smearLevel", 0.6f } } },
+            // the owner's measured POG2 setting (run G1): ATTACK 2 s, 18 dB/oct at 1 kHz, the +-10 cent copies (MIX 0.39)
+            { "POG2", "Pad", { { "vol", 7.5f }, { "attack", 2000 }, { "freq", 1000 }, { "detune", 10.1f }, { "detuneMix", 0.39f } } },
+            // held notes bloom into an octave of feedback, as in front of a loud amp
+            { "Amp in the room", "Feedback", { { "vol", -3.5f }, { "attack", 80 }, { "sustain", 0.5f }, { "dry", 0.3f },
+                                               { "feedback", 0.8f }, { "fbDistance", 0.3f }, { "fbRise", 1.2f }, { "fbTone", 1600 } } },
+            // classic volume swells (pedal steel) that still speak when the playing gets fast
+            { "Slow gear", "Effect", { { "vol", 1.5f }, { "attack", 900 }, { "follow", 0.6f }, { "sustain", 0.2f }, { "smearOn", 1 }, { "smearSize", 0.35f }, { "smearLevel", 0.2f } } },
+            // a backwards-sounding bloom: no make-up, the reverb swelling with the note
+            { "Reverse tape", "Effect", { { "vol", 5.0f }, { "attack", 500 }, { "levelMatch", 0 }, { "smearOn", 1 }, { "smearSend", 1 }, { "smearSize", 0.5f }, { "smearLevel", 0.45f } } },
+            // an auto-wah on every note: the filter opens with each pick, harder picks further
+            { "Envelope filter", "Effect", { { "vol", -4.5f }, { "attack", 20 }, { "slope", 1 }, { "freq", 600 }, { "mod", 0.7f }, { "res", 0.55f }, { "pickFilter", 0.6f } } },
+            // lo-fi and seasick
+            { "Warble", "Effect", { { "vol", 2.5f }, { "attack", 600 }, { "tremolo", 0.4f }, { "tremRate", 5.5f }, { "tremShape", 0 },
+                                    { "vibDepth", 6 }, { "vibRate", 4.5f }, { "vibTarget", 2 }, { "detuneMix", 0.4f } } } };
         return p;
     }
 }
