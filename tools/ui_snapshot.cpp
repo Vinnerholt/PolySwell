@@ -318,6 +318,9 @@ int main (int argc, char** argv)
         pe->setUiScale (1.f);
         for (int sk = 0; sk < 4; ++sk) { pe->setSkin (sk); pump (300); shoot (e, out.getChildFile ("skin_" + juce::String (sk) + ".png")); }
         pe->setSkin (0);
+        for (int sh : { 0, 1 })   // ATTACK's zones follow the curve: SLOW, BOWED (POG2 is in every other shot)
+        { setParam (proc, "swellShape", (float) sh); pump (300); shoot (e, out.getChildFile (sh == 0 ? "curve_slow.png" : "curve_bowed.png")); }
+        setParam (proc, "swellShape", 2.f); pump (200);
     }
 
     // the window explaining a knob (as when the mouse is over it)

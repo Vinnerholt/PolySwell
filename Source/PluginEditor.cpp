@@ -1693,8 +1693,8 @@ struct SignalWindow : juce::Component, juce::Timer
         auto ampOf = [&] (float strength) { return std::pow (10.f, strength * 12.f * (1.f - even) / 40.f); };   // half the dB, so soft picks stay readable
         float pkRef = 1.0e-6f;
         for (int k = 0; k <= 120; ++k) pkRef = juce::jmax (pkRef, swelled (Tw * (float) k / 120.f, A0));
-        // level: in dB, as it is heard - 36 dB from the bottom to the top, the hardest pick's peak just under the top
-        const float topDb = 20.f * std::log10 (pkRef * ampOf (1.f) + 1.0e-9f) + 1.f, rangeDb = 36.f;
+        // level: in dB, as it is heard - 48 dB from the bottom to the top, the hardest pick's peak just under the top
+        const float topDb = 20.f * std::log10 (pkRef * ampOf (1.f) + 1.0e-9f) + 1.f, rangeDb = 48.f;   // 48 dB: SLOW and BOWED show from early on
         auto ay = [&] (float a) { const float db = 20.f * std::log10 (a + 1.0e-9f); return pa.getBottom() - pa.getHeight() * juce::jlimit (0.f, 1.f, (db - (topDb - rangeDb)) / rangeDb); };
         auto curveOf = [&] (float amp, float att, float upTo)
         {
@@ -2854,6 +2854,7 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         if (getParam ("smearOn") > 0.5f) act |= 32;
         if (gateHold != nullptr) { const float a = getParam ("smearGate") > 0.5f ? 1.f : 0.4f; gateHold->setAlpha (a); gateCut->setAlpha (a); }
         if (bodyMixC != nullptr) bodyMixC->setAlpha (getParam ("bodyIr") > 0.5f ? 1.f : 0.35f);
+        if (juce::roundToInt (getParam ("swellShape")) != bakedShape) { bg = {}; repaint(); }   // ATTACK's zones follow the curve
         if (act != drawer.mask || drawer.open != panelOpen) { drawer.mask = act; drawer.open = panelOpen; drawer.repaint(); }
     }
 
@@ -2899,8 +2900,8 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         // through the knob's own taper, ticks at the borders and an accent dot at the setting measured on the owner's POG2
         {
             struct Zone { const char* word; float lo, hi; };
-            auto zones = [&] (float kx, float ky, const char* paramId, std::initializer_list<float> borders,
-                              std::initializer_list<Zone> words, float dotAt)
+            auto zones = [&] (float kx, float ky, const char* paramId, std::vector<float> borders,
+                              std::vector<Zone> words)
             {
                 const float cx = pr.getX() + kx, cy = pr.getY() + ky;
                 auto* prm = proc.apvts.getParameter (paramId);
@@ -2908,8 +2909,6 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
                 auto at = [&] (float ang, float r) { return juce::Point<float> (cx + r * std::sin (ang), cy - r * std::cos (ang)); };
                 g.setColour (sk.ink.withAlpha (0.6f));
                 for (float v : borders) { const float a = angOf (v); g.drawLine (juce::Line<float> (at (a, 44.5f), at (a, 48.5f)), 1.2f); }
-                const auto dot = at (angOf (dotAt), 46.5f);
-                g.setColour (sk.accent); g.fillEllipse (dot.x - 2.4f, dot.y - 2.4f, 4.8f, 4.8f);
                 const auto f = uiFont (8.f, true, 0.16f);
                 g.setFont (f);
                 g.setColour (sk.ink.withAlpha (0.8f));
@@ -2934,11 +2933,18 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
                 }
             };
             // ATTACK (ms): PICK | SWELL | PAD | DRONE; the POG2 setting 2 s (PAD centred before the dot)
-            zones (84.f, 276.f, "attack", { 100.f, 600.f, 3000.f },
-                   { { "PICK", 0.f, 100.f }, { "SWELL", 100.f, 600.f }, { "PAD", 600.f, 1400.f }, { "DRONE", 3000.f, 12000.f } }, 2000.f);
-            // TONE (Hz): DARK | WARM | OPEN; the POG2 setting 1 kHz (WARM centred after the dot)
+            // ATTACK (ms): PICK | SWELL | PAD | DRONE, placed for the chosen CURVE by how soon a note is half as loud (-6 dB):
+            // the owner's rule "POG2 under 1 s is a pick" = half loudness within 0.215 s; the other borders 0.645 s and 1.72 s.
+            // The curves get there at 21.5 % (POG2), 41 % (BOWED) or 70.7 % (SLOW) of ATTACK, so their borders differ.
+            const int shape = juce::roundToInt (proc.apvts.getRawParameterValue ("swellShape")->load());
+            const float k = shape == 2 ? 0.215f : shape == 1 ? 0.41f : 0.707f;
+            const float b1 = 1000.f * 0.215f / k, b2 = 1000.f * 0.645f / k, b3 = 1000.f * 1.72f / k;
+            zones (84.f, 276.f, "attack", { b1, b2, b3 },
+                   { { "PICK", 0.f, b1 }, { "SWELL", b1, b2 }, { "PAD", b2, b3 }, { "DRONE", b3, 12000.f } });
+            bakedShape = shape;
+            // TONE (Hz): DARK | WARM | OPEN
             zones (308.f, 276.f, "freq", { 500.f, 2500.f },
-                   { { "DARK", 120.f, 500.f }, { "WARM", 1150.f, 2500.f }, { "OPEN", 2500.f, 12000.f } }, 1000.f);
+                   { { "DARK", 120.f, 500.f }, { "WARM", 500.f, 2500.f }, { "OPEN", 2500.f, 12000.f } });
         }
         for (auto& gr : pedalGroups)
         {
@@ -3107,6 +3113,7 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
     FootSwitch onSw;
     std::unique_ptr<MiniToggle> matchSw;
     std::unique_ptr<juce::Component> curveSeg;
+    int bakedShape = -1;
     DrawerTab drawer;
     std::vector<std::pair<Rect, Colour>> subBoxes;
     std::unique_ptr<juce::Component> waveScope, waveGrid;

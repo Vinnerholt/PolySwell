@@ -261,3 +261,7 @@ Slow gear, Reverse tape (MATCH off), Envelope filter, Warble. LEVEL per preset s
 - FEEDBACK rise counts from the pick (owner: after the swell, a 2 s ATTACK left no time): `fbAmt` grows while the bin is
   active; `fbBloom` is multiplied by the note's swell gain, so the harmonic is never ahead of the swell. Window live view and
   the FEEDBACK picture follow. Test 37.
+- Zones v2 (owner): no dots. ATTACK's borders follow the CURVE by when a note is half as loud (-6 dB): 0.215 / 0.645 /
+  1.72 s, i.e. POG2 (21.5 % of ATTACK) PICK < 1 s | SWELL < 3 s | PAD < 8 s | DRONE; BOWED (41 %) 0.52 / 1.57 / 4.2 s;
+  SLOW (70.7 %) 0.30 / 0.91 / 2.43 s. The artwork re-bakes when the curve changes (`bakedShape`). Window LEVEL range 48 dB.
+  `ui_snapshot` also writes curve_slow.png / curve_bowed.png.
