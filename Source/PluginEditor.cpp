@@ -2074,6 +2074,56 @@ struct MiniToggle : juce::Component, juce::SettableTooltipClient
     Bound bound;
 };
 
+// the swell curve as three printed pictures on the pedal: POG2 (fast, then a long tail), SLOW (quiet start), BOWED (S)
+struct CurveSeg : juce::Component, juce::SettableTooltipClient
+{
+    CurveSeg (PolySwellProcessor& p, const Skin* const* s) : skin (s), bound (p, "swellShape", [this] { repaint(); })
+    {
+        setMouseCursor (juce::MouseCursor::PointingHandCursor);
+        setTooltip ("CURVE: how a note fades in over ATTACK. POG2 (default, measured from the pedal): loud quickly, then a long tail. "
+                    "SLOW: starts quiet and grows evenly, for slow pads. BOWED: an S-curve, like a bow. Right-click: MIDI learn.");
+    }
+    static constexpr int kOrder[3] = { 2, 0, 1 };   // POG2, SLOW, BOWED (swellShape values)
+    static float shape (int v, float x)
+    {
+        if (v == 2) return (1.f - std::exp (-3.f * x)) / (1.f - std::exp (-3.f));
+        if (v == 0) return x * x;
+        return std::pow ((1.f - std::exp (-3.1f * x)) / (1.f - std::exp (-3.1f)), 2.45f);
+    }
+    void paint (Graphics& g) override
+    {
+        if (skin == nullptr || *skin == nullptr) return;
+        const Skin& sk = **skin;
+        const auto b = getLocalBounds().toFloat().reduced (0.5f);
+        const float w = b.getWidth() / 3.f;
+        const int cur = juce::roundToInt (bound.value);
+        for (int i = 0; i < 3; ++i)
+        {
+            const Rect c (b.getX() + w * (float) i, b.getY(), w, b.getHeight());
+            const bool on = kOrder[i] == cur;
+            if (on) { g.setColour (sk.accent); g.fillRoundedRectangle (c.reduced (1.f), 3.f); }
+            const Rect ic = c.reduced (5.f, 3.5f);
+            juce::Path p;
+            for (int k = 0; k <= 20; ++k)
+            {
+                const float x = (float) k / 20.f, px = ic.getX() + x * ic.getWidth(), py = ic.getBottom() - shape (kOrder[i], x) * ic.getHeight();
+                if (k == 0) p.startNewSubPath (px, py); else p.lineTo (px, py);
+            }
+            g.setColour (on ? sk.onAccent : sk.ink.withAlpha (0.85f));
+            g.strokePath (p, juce::PathStrokeType (1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        }
+        g.setColour (sk.ink.withAlpha (0.7f)); g.drawRoundedRectangle (b, 4.f, 1.f);
+    }
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        if (e.mods.isPopupMenu()) { if (onMenu) onMenu(); return; }
+        bound.set ((float) kOrder[juce::jlimit (0, 2, (int) (e.position.x / ((float) getWidth() / 3.f)))]);
+    }
+    std::function<void()> onMenu;
+    const Skin* const* skin;
+    Bound bound;
+};
+
 // a choice of LFO shapes as pictures (sine, triangle, square)
 struct ShapeSeg : juce::Component, juce::SettableTooltipClient
 {
@@ -2387,33 +2437,27 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
 
         // the ON footswitch, centred, its LED to the left
         addAndMakeVisible (onLed);
-        onLed.setBounds (juce::roundToInt (px + 254 - 18), juce::roundToInt (py + 574 - 18), 36, 36);   // room for the glow
+        onLed.setBounds (juce::roundToInt (px + 128 - 18), juce::roundToInt (py + 574 - 18), 36, 36);   // room for the glow
         onLed.pedalSkin = &currentSkin;
         addAndMakeVisible (onSw);
         onSw.setBounds (juce::roundToInt (px + 196 - 36), juce::roundToInt (py + 584 - 36), 72, 72);
         onSw.setTooltip ("ON: switches the pedal in or out (bypass). Right-click: MIDI learn (a footswitch on your controller).");
         onSw.onMenu = [this] { midiMenu ("bypass", onSw); };
         onSw.onDown = [this] { setParam ("bypass", getParam ("bypass") > 0.5f ? 0.f : 1.f); };
-        label ("ON", { px + 254 - 20, py + 592, 40, 14 }, 12.f, col::ink, juce::Justification::centred, true, 0.18f);
-        // CURVE: a three-way mini toggle left of the LED: up POG2 (default), middle CLASSIC, down BOWED (swellShape 2 / 0 / 1)
-        curveSw = std::make_unique<MiniToggle> (proc, "swellShape", std::vector<float> { 2.f, 0.f, 1.f });
-        curveSw->setTooltip ("CURVE: how a note fades in. Up: POG2 (the default, measured from the pedal: loud quickly, then a long tail). "
-                             "Middle: CLASSIC (starts quiet, grows evenly: slow pads). Down: BOWED (an S-curve, like a bow). Click the top, middle or bottom.");
-        curveSw->onMenu = [this] { midiMenu ("swellShape", *curveSw); };
-        curveSw->setBounds (juce::roundToInt (px + 126 - 16), juce::roundToInt (py + 572 - 21), 32, 42);
-        addAndMakeVisible (*curveSw);
-        label ("CURVE", { px + 126 - 30, py + 592, 60, 14 }, 12.f, col::ink, juce::Justification::centred, true, 0.18f);
-        label ("POG2", { px + 60, py + 572 - 18, 50, 10 }, 7.5f, col::ink, juce::Justification::centredRight, true, 0.12f);
-        label ("CLASSIC", { px + 60, py + 572 - 5, 50, 10 }, 7.5f, col::ink, juce::Justification::centredRight, true, 0.12f);
-        label ("BOWED", { px + 60, py + 572 + 8, 50, 10 }, 7.5f, col::ink, juce::Justification::centredRight, true, 0.12f);
+        label ("ON", { px + 128 - 20, py + 592, 40, 14 }, 12.f, col::ink, juce::Justification::centred, true, 0.18f);
+        // CURVE: three pictures beside the printed ATTACK label (the curve belongs to ATTACK): POG2 (default), SLOW, BOWED
+        curveSeg = std::make_unique<CurveSeg> (proc, &currentSkin);
+        curveSeg->setBounds (juce::roundToInt (px + 114), juce::roundToInt (py + 327), 66, 17);
+        static_cast<CurveSeg*> (curveSeg.get())->onMenu = [this] { midiMenu ("swellShape", *curveSeg); };
+        addAndMakeVisible (*curveSeg);
         // MATCH: a mini toggle mirroring the LED on the other side of the footswitch
         matchSw = std::make_unique<MiniToggle> (proc, "levelMatch");
         matchSw->setTooltip ("MATCH: each note's swell ends as loud as its pick (up = on, the default). Off: the note keeps the string's own fade, so looser playing stays quieter. "
                              "The POG2 has no such switch: its built-in gain always brings plucks back to about their pick level, which is MATCH on. Right-click: MIDI learn.");
         matchSw->onMenu = [this] { midiMenu ("levelMatch", *matchSw); };
-        matchSw->setBounds (juce::roundToInt (px + 314 - 16), juce::roundToInt (py + 572 - 20), 32, 40);
+        matchSw->setBounds (juce::roundToInt (px + 264 - 16), juce::roundToInt (py + 572 - 20), 32, 40);
         addAndMakeVisible (*matchSw);
-        label ("MATCH", { px + 314 - 30, py + 592, 60, 14 }, 12.f, col::ink, juce::Justification::centred, true, 0.18f);
+        label ("MATCH", { px + 264 - 30, py + 592, 60, 14 }, 12.f, col::ink, juce::Justification::centred, true, 0.18f);
     }
 
     // ---- panel
@@ -2726,7 +2770,7 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         m.addSubMenu ("Size", size);
         m.addItem (4, panelOpen ? "Hide the effects panel" : "Show the effects panel");
         juce::PopupMenu curveM;
-        const char* curves[3] = { "Classic", "Bowed (slow, S-shaped start)", "POG2 (default)" };
+        const char* curves[3] = { "Slow (starts quiet, grows evenly)", "Bowed (an S-curve)", "POG2 (default: loud quickly, long tail)" };
         for (int i : { 2, 0, 1 }) curveM.addItem (390 + i, curves[i], true, juce::roundToInt (getParam ("swellShape")) == i);
         curveM.addSeparator();
         curveM.addItem (395, "MATCH: swells end as loud as the pick (instead of the POG2's gain)", true, getParam ("levelMatch") > 0.5f);
@@ -3048,7 +3092,8 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
     const Skin* currentSkin = nullptr; Chip* abC[2] { nullptr, nullptr }; Chip* bodyC = nullptr;
     Led onLed { proc, "bypass", true, "Lit while the pedal is on." };
     FootSwitch onSw;
-    std::unique_ptr<MiniToggle> matchSw, curveSw;
+    std::unique_ptr<MiniToggle> matchSw;
+    std::unique_ptr<juce::Component> curveSeg;
     DrawerTab drawer;
     std::vector<std::pair<Rect, Colour>> subBoxes;
     std::unique_ptr<juce::Component> waveScope, waveGrid;

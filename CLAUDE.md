@@ -249,3 +249,6 @@ Slow gear, Reverse tape (MATCH off), Envelope filter, Warble. LEVEL per preset s
   ON LED and MATCH moved right of the footswitch. Measured: no hidden gain; the POG2 curve is front-loaded by nature
   (ATTACK 7 s, held note: POG2 -27 dB at 0.1 s, -9 at 1 s; Classic -74 / -34), so slow pads = CLASSIC or BOWED.
   The POG2 slider top is tau >= 4 s (12 s+ on our scale): the json's t50/t90 are against unity, not the swell's own end.
+- CURVE moved beside the printed ATTACK label (owner): `CurveSeg`, three pictures of the real shapes (POG2 | SLOW |
+  BOWED), lit = active, right-click MIDI learn; the three-way toggle is gone, the footswitch row is LED | ON | MATCH again.
+  "Classic" is shown as "Slow" (choice text only; values unchanged).

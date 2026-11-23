@@ -284,7 +284,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout PolySwellProcessor::createLa
            juce::NormalisableRange<float> (0.f, 1.f, 0.001f), 0.f));
     l.add (std::make_unique<juce::AudioParameterBool> (PID { "vocalOn", 1 }, "Voice Vocal On", true));
     // swell character (VG-8 BOWED spec): shape of the swell, smooth re-picks, EVEN (picks levelled)
-    l.add (std::make_unique<juce::AudioParameterChoice> (PID { "swellShape", 1 }, "Swell Shape", juce::StringArray { "Classic", "Bowed", "POG2" }, 2));
+    l.add (std::make_unique<juce::AudioParameterChoice> (PID { "swellShape", 1 }, "Swell Shape", juce::StringArray { "Slow", "Bowed", "POG2" }, 2));   // "Slow" was "Classic" (display only)
     l.add (std::make_unique<juce::AudioParameterBool> (PID { "smoothRepick", 1 }, "Smooth Re-pick", false));
     l.add (std::make_unique<juce::AudioParameterBool> (PID { "levelMatch", 1 }, "Level-matched Swell", true));   // on by default: closest to the POG2 on plucks
     // FEEDBACK amp model (PolySwell II)
