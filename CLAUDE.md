@@ -230,6 +230,9 @@ rings (outer = lightest). Switch: SKIN chip in the top bar or gear > Skin; saved
   POG2 swell LEVEL +5, Warm pad +3.
 
 ## TODO (owner)
+- Owner's tuned Default saved 2026-11-23 20:36 as Documents\PolySwell\Presets\Default.polyswell: bake it in as the factory
+  Default when the presets are done (the same folder also holds old gen-1 user presets, e.g. Smooth lead from Nov 10 - not the
+  new one).
 - Owner tunes the 13 baseline presets (2026-11-23) by ear and saves each under its own name (SAVE -> Documents\PolySwell  Presets\*.polyswell); then read those files and bake them into `newPresets()`. Owner expects longer attacks overall
   (Default's 150 ms is a first try).
 - 2.0.1: Lagoon and Midnight logos recoloured from the Sunburst logo with Sunburst's soft steps mapped to light blue
