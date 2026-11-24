@@ -258,7 +258,8 @@ int main (int argc, char** argv)
     if (argc > 2 && juce::String (argv[1]) == "--params")   // every parameter of a factory preset: id=value (to diff user presets)
     {
         auto pp = std::make_unique<PolySwellProcessor>();
-        for (int i = 0; i < pp->getNumPrograms(); ++i) if (pp->getProgramName (i) == juce::String (argv[2])) pp->setCurrentProgram (i);
+        if (juce::String (argv[2]) == "(base)") pp->applyBase();
+        else for (int i = 0; i < pp->getNumPrograms(); ++i) if (pp->getProgramName (i) == juce::String (argv[2])) pp->setCurrentProgram (i);
         for (auto* prm : pp->getParameters())
             if (auto* r = dynamic_cast<juce::RangedAudioParameter*> (prm))
                 std::printf ("%s=%.6g\n", r->getParameterID().toRawUTF8(), r->convertFrom0to1 (r->getValue()));
@@ -344,7 +345,7 @@ int main (int argc, char** argv)
         t = 0;
         for (int i = 0; i < 14; ++i) { feedChord (proc, 0.05, t); pump (40); }   // audio running while the window animates
         shoot (e, out.getChildFile ("14_live.png"));
-        const char* ids[] = { "attack", "sustain", "touch", "follow", "feedback", "fbDistance", "vibDepth", "spread", "voiceMix", "smearSize" };
+        const char* ids[] = { "attack", "sustain", "touch", "follow", "feedback", "fbDistance", "vibDepth", "spread", "voiceMix", "smearSize", "res", "freq" };
         int n = 6;
         for (auto* id : ids)
         {

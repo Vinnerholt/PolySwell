@@ -85,6 +85,7 @@ public:
     bool loadUserPreset (const juce::File& file);
     juce::String currentPresetName { "Default" };
     bool userPresetLoaded = false;
+    void applyBase();                      // every parameter at its default + the stock base (what each stock preset starts from)
     void rememberLoaded();                 // the values as loaded / saved: anything else = changed (the LCD shows *)
     bool isModified() const;
     std::vector<float> loadedValues;

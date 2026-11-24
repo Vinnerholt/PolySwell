@@ -284,3 +284,10 @@ Slow gear, Reverse tape (MATCH off), Envelope filter, Warble. LEVEL per preset s
   room", boxes BODY (TYPE, MIX) | INPUT (FEED, ONLY ABOVE) | GATE (ON, HOLD, FADE), DARK in the header. BODY follows
   SPACE's switch now (processor: `smearOn`, was `filterOn`); the Violin preset gets SPACE on with a small room (0.35 / 0.15).
 - MOTION: VIBRATO | TREMOLO on top, one WIDTH box below: SPREAD + PLACE, DETUNE + CENTS (`detune`, also in the gear menu).
+- 2.2.0 (2026-11-24): stock presets Default dynamic, Smooth lead, Violin (owner's VIOLIN) and Mk.gee (owner's; replaces
+  Gated VG) baked from the owner's files (`ui_snapshot --params (base)` = `applyBase()`; diffed; gen-1 controls held neutral
+  and midiOut left out). Parameter display names Smear -> Space. Module LEDs 36 px (glow). RES picture uses the engine's Q
+  (`resToQ`: at 18 dB/oct the old 0.5 x 20^RES drew no peak). Presets: delete your own (menu > Delete one of yours, to the
+  Recycle Bin, asked first); "Discard your changes?" before another preset replaces a changed sound; prev/next run through
+  the stock presets then the user's. Knobs: Alt-click types a value ("2.5 s", "1.2k"), Shift-drag fine (x6). Right-click a
+  module's title: reset it (`moduleParams`). A/B: click the lit slot to copy it to the other.

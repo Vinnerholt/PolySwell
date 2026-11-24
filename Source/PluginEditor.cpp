@@ -447,10 +447,13 @@ struct Knob : juce::Slider
         getProperties().set ("kind", kind);
         getProperties().set ("ac", (juce::int64) ac.getARGB());
         getProperties().set ("label", shownName);
-        setTooltip (String (tipFor (paramId)) + (kind < 3 ? "  Double-click: reset. Right-click: MIDI learn." : ""));
+        setTooltip (String (tipFor (paramId)) + (kind < 3 ? "  Double-click: reset. Shift-drag: fine. Alt-click: type a value. Right-click: MIDI learn."
+                                                          : "  Shift-drag: fine. Alt-click: type a value."));
         att = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (p.apvts, paramId, *this);
         if (auto* prm = p.apvts.getParameter (paramId)) setDoubleClickReturnValue (true, prm->convertFrom0to1 (prm->getDefaultValue()));
         const String unit = p.apvts.getParameter (paramId)->getLabel();
+        unitLabel = unit;
+        baseSensitivity = kind == 3 ? 160 : 220;
         textFromValueFunction = [base = textFromValueFunction, unit] (double v) { return tidyValue (base ? base (v) : String (v), unit); };
         onValueChange = [this] { if (isMouseOverOrDragging()) show(); repaint(); };
         onDragStart = [this] { show(); host.focus (id, true); };
@@ -459,7 +462,35 @@ struct Knob : juce::Slider
     void mouseEnter (const juce::MouseEvent& e) override { juce::Slider::mouseEnter (e); show(); host.focus (id, true); repaint(); }
     void mouseExit (const juce::MouseEvent& e) override { juce::Slider::mouseExit (e); if (! e.mods.isAnyMouseButtonDown()) host.focus (id, false); repaint(); }
     void show() { host.readout (name, getTextFromValue (getValue())); }
-    void mouseDown (const juce::MouseEvent& e) override { if (e.mods.isPopupMenu()) { host.midiMenu (id, *this); return; } juce::Slider::mouseDown (e); }
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        if (e.mods.isPopupMenu()) { host.midiMenu (id, *this); return; }
+        if (e.mods.isAltDown()) { typeValue(); return; }                       // Alt-click: type an exact value
+        setMouseDragSensitivity (e.mods.isShiftDown() ? baseSensitivity * 6 : baseSensitivity);   // Shift: fine steps
+        juce::Slider::mouseDown (e);
+    }
+    void typeValue()
+    {
+        auto* w = new juce::AlertWindow ("Type a value", name, juce::MessageBoxIconType::NoIcon, this);
+        w->addTextEditor ("v", getTextFromValue (getValue()));
+        w->addButton ("OK", 1, juce::KeyPress (juce::KeyPress::returnKey));
+        w->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+        juce::Component::SafePointer<Knob> self (this);
+        w->enterModalState (true, juce::ModalCallbackFunction::create ([self, w] (int r)
+        {
+            if (r == 1 && self != nullptr)
+                self->setValue (juce::jlimit (self->getMinimum(), self->getMaximum(), self->parseTyped (w->getTextEditorContents ("v"))), juce::sendNotificationSync);
+        }), true);
+    }
+    double parseTyped (String t) const   // "750", "2.5 s" (ATTACK in ms), "1.2k" (Hz), "-6"
+    {
+        t = t.trim().toLowerCase();
+        double v = t.getDoubleValue();
+        const String rest = t.trimCharactersAtStart ("0123456789.-+ ").trim();
+        if (unitLabel == "ms" && rest.startsWith ("s")) v *= 1000.0;
+        if (unitLabel == "Hz" && rest.startsWith ("k")) v *= 1000.0;
+        return v;
+    }
     void mouseDrag (const juce::MouseEvent& e) override { if (! e.mods.isPopupMenu()) juce::Slider::mouseDrag (e); }
     void mouseUp (const juce::MouseEvent& e) override { if (! e.mods.isPopupMenu()) juce::Slider::mouseUp (e); }
     bool hitTest (int x, int y) override   // round knobs: only the knob itself, so neighbours never steal the mouse
@@ -476,7 +507,8 @@ struct Knob : juce::Slider
     }
 
     Host& host;
-    String name, id;
+    String name, id, unitLabel;
+    int baseSensitivity = 220;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> att;
 };
 
@@ -1249,8 +1281,9 @@ struct SignalWindow : juce::Component, juce::Timer, juce::TooltipClient
             tag (g, m.second, X (m.first) + 3.f, bot - 7.f, cText.withAlpha (0x88 / 255.f));
         }
         const bool fon = P ("filterOn") > 0.5f;
-        const float fc = P ("freq"), q = 0.5f * std::pow (20.f, juce::jlimit (0.f, 1.f, P ("res")));
         const int slope = juce::roundToInt (P ("slope"));
+        // Q as the engine's resToQ: at 18 dB/oct RES 0 = Q 1 (the POG2's curve), up to Q 10 (the old 0.5 x 20^RES drew no peak there)
+        const float q0 = slope == 4 ? 1.f : 0.5f, fc = P ("freq"), q = q0 * std::pow (10.f / q0, juce::jlimit (0.f, 1.f, P ("res")));
         auto response = [&] (float cut)
         {
             juce::Path p;
@@ -2436,10 +2469,18 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         skinC->onPress = [this] { skinMenu (skinC); };
         for (int i = 0; i < 2; ++i)
         {
-            auto* c = chip (Chip::custom, "", i == 0 ? "A" : "B", col::amber, "A / B: two versions of the sound to compare. Click the other one to switch.", barOnly);
+            auto* c = chip (Chip::custom, "", i == 0 ? "A" : "B", col::amber, "A / B: two versions of the sound to compare. Click the other one to switch; click the lit one to copy it to the other.", barOnly);
             c->mode = Chip::toggle; c->setSize (26, 22);
             c->litFn = [this, i] { return abSlot == i; };
-            c->onPress = [this, i] { switchAb (i); };
+            c->onPress = [this, i, c]
+            {
+                if (abSlot != i) { switchAb (i); return; }
+                juce::PopupMenu m;
+                m.addItem (1, String ("Copy ") + (i == 0 ? "A to B" : "B to A") + " (replaces " + (i == 0 ? "B" : "A") + ")");
+                m.setLookAndFeel (&look);
+                m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (c), [this, i] (int r)
+                { if (r == 1) abState[(size_t) (1 - i)] = proc.apvts.copyState(); });
+            };
             abC[i] = c;
         }
     }
@@ -2556,9 +2597,9 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
         {
             if (i == 4) continue;   // unused slot (was HOLD)
             const auto r = moduleRect (i);
-            Led* l = leds.add (new Led (proc, kMods[i].onId, false, String (kMods[i].title) + ": click to switch this module on or off."));
+            Led* l = leds.add (new Led (proc, kMods[i].onId, false, String (kMods[i].title) + ": click to switch this module on or off. Right-click its title: reset it."));
             l->onUserToggle = [this, id = kMods[i].onId] { wakeModule (id); };
-            l->setBounds (juce::roundToInt (r.getX() + 8), juce::roundToInt (r.getY() + 8), 26, 24);
+            l->setBounds (juce::roundToInt (r.getX() + 3), juce::roundToInt (r.getY() + 2), 36, 36);   // the glow needs ~32 px
             addAndMakeVisible (l); g.add (l);
             label (kMods[i].title, { r.getX() + 62, r.getY() + 10, 120, 20 }, 16.f, kMods[i].ac.interpolatedWith (col::cream, 0.4f), juce::Justification::centredLeft, true, 0.2f);
             const float tw = juce::GlyphArrangement::getStringWidth (uiFont (16.f, true, 0.2f), kMods[i].title);
@@ -2721,11 +2762,44 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
     // ---------- 1. a control touched in a module that is off switches the module on (it would otherwise do nothing)
     void mouseDown (const juce::MouseEvent& e) override
     {
+        if (e.eventComponent == this && e.mods.isPopupMenu() && panelOpen)   // right-click a module's title: reset it
+        {
+            for (int i = 0; i < 6; ++i)
+                if (i != 4 && moduleRect (i).withHeight (36.f).contains (e.position)) { resetModuleMenu (i); return; }
+            return;
+        }
         if (e.eventComponent == this || e.eventComponent == nullptr || e.mods.isPopupMenu()) return;
         const auto c = e.eventComponent->getBounds().getCentre().toFloat();
         for (int i = 0; i < 6; ++i)
             if (i != 4 && kMods[i].onId != nullptr && moduleRect (i).contains (c) && getParam (kMods[i].onId) < 0.5f)
             { setParam (kMods[i].onId, 1.f); wakeModule (kMods[i].onId); }
+    }
+
+    static std::vector<const char*> moduleParams (int i)
+    {
+        switch (i)
+        {
+            case 0:  return { "mod", "res", "pickFilter", "slope" };
+            case 1:  return { "feedback", "fbDistance", "fbRise", "fbTone", "fbAmp", "fbOneWins", "fbMode", "fbHarmonic" };
+            case 2:  return { "vibDepth", "vibRate", "vibDelay", "vibTarget", "vibHuman", "tremolo", "tremRate", "tremShape",
+                              "spread", "spreadMode", "detuneMix", "detune" };
+            case 3:  return { "voiceMix", "voiceTone", "voiceGlide", "voiceCharacter", "voiceWave", "voiceOct", "voiceMono", "voiceUnison" };
+            default: return { "smearSize", "smearLevel", "smearDrive", "smearSend", "smearThresh", "smearDark", "smearGate", "smearHold",
+                              "smearCut", "bodyIr", "bodyMix", "bowedBody" };
+        }
+    }
+    void resetModuleMenu (int i)
+    {
+        juce::PopupMenu m;
+        m.addItem (1, String ("Reset ") + kMods[i].title + " to its defaults");
+        m.setLookAndFeel (&look);
+        m.showMenuAsync (juce::PopupMenu::Options(), [this, i] (int r)
+        {
+            if (r != 1) return;
+            for (auto* id : moduleParams (i))
+                if (auto* prm = proc.apvts.getParameter (id))
+                { prm->beginChangeGesture(); prm->setValueNotifyingHost (prm->getDefaultValue()); prm->endChangeGesture(); }
+        });
     }
 
     void listenToPanelControls()
@@ -2744,10 +2818,32 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
     }
 
     // ---- menus
+    // before a preset replaces a sound with changes: ask (Discard / Keep editing)
+    void confirmDiscard (std::function<void()> go)
+    {
+        if (! proc.isModified()) { go(); return; }
+        juce::AlertWindow::showOkCancelBox (juce::MessageBoxIconType::QuestionIcon, "Discard your changes?",
+                                            "\"" + proc.currentPresetName + "\" has changes that are not saved. Click SAVE first to keep them.",
+                                            "Discard", "Keep editing", this,
+                                            juce::ModalCallbackFunction::create ([go] (int r) { if (r == 1) go(); }));
+    }
+
     void stepPreset (int d)
     {
+        confirmDiscard ([this, d] { stepPresetNow (d); });
+    }
+    void stepPresetNow (int d)   // the stock presets, then yours, round and round
+    {
         const int n = proc.getNumPrograms();
-        proc.setCurrentProgram ((proc.getCurrentProgram() + d + n) % n);
+        const auto user = PolySwellProcessor::userPresets();
+        const int total = n + user.size();
+        int cur = proc.getCurrentProgram();
+        if (proc.userPresetLoaded)
+            for (int k = 0; k < user.size(); ++k)
+                if (user[k].getFileNameWithoutExtension() == proc.currentPresetName) { cur = n + k; break; }
+        const int next = (cur + d + total) % total;
+        if (next < n) proc.setCurrentProgram (next);
+        else proc.loadUserPreset (user[next - n]);
     }
 
     void presetMenu()
@@ -2766,12 +2862,26 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
             m.addItem (1000 + i, user[i].getFileNameWithoutExtension(), true, proc.userPresetLoaded && proc.currentPresetName == user[i].getFileNameWithoutExtension());
         m.addSeparator();
         m.addItem (1, "Save as...");
+        if (! user.isEmpty())
+        {
+            juce::PopupMenu del;
+            for (int i = 0; i < user.size(); ++i) del.addItem (2000 + i, user[i].getFileNameWithoutExtension());
+            m.addSubMenu ("Delete one of yours", del);
+        }
         m.setLookAndFeel (&look);
         m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&lcd).withMaximumNumColumns (2), [this, user] (int r)
         {
             if (r == 1) savePreset();
-            else if (r >= 1000) { proc.loadUserPreset (user[r - 1000]); }
-            else if (r >= 100) { proc.setCurrentProgram (r - 100); }
+            else if (r >= 2000)   // delete one of yours: to the Recycle Bin, after a question
+            {
+                const auto f = user[r - 2000];
+                juce::AlertWindow::showOkCancelBox (juce::MessageBoxIconType::WarningIcon, "Delete preset?",
+                                                    "\"" + f.getFileNameWithoutExtension() + "\" goes to the Recycle Bin (you can restore it from there).",
+                                                    "Delete", "Cancel", this,
+                                                    juce::ModalCallbackFunction::create ([f] (int res) { if (res == 1) f.moveToTrash(); }));
+            }
+            else if (r >= 1000) { const auto f = user[r - 1000]; confirmDiscard ([this, f] { proc.loadUserPreset (f); }); }
+            else if (r >= 100) { const int i = r - 100; confirmDiscard ([this, i] { proc.setCurrentProgram (i); }); }
         });
     }
 

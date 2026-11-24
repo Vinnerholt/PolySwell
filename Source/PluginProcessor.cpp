@@ -30,28 +30,32 @@ namespace
                                       { "feedbackOn", 0 }, { "feedback", 0.386f }, { "fbRise", 0.2f },
                                       { "motionOn", 0 }, { "tremolo", 0.177f }, { "tremRate", 1.62f }, { "detuneMix", 0.209f },
                                       { "voiceOn", 0 } } },
-            // the pedal reacting to the playing
-            { "Default dynamic", "Default", { { "attack", 450 }, { "touch", 0.4f }, { "follow", 0.5f }, { "even", 0.3f }, { "sustain", 0.35f },
-                                               { "freq", 5000 }, { "pickFilter", 0.3f },
-                                               { "feedback", 0.2f }, { "fbDistance", 0.3f }, { "fbRise", 1.5f } } },
-            // rolled-off highs, a little dynamic, a saw voice gliding under it, vibrato that sets in late
-            { "Smooth lead", "Lead", { { "attack", 350 }, { "sustain", 0.55f }, { "touch", 0.3f }, { "follow", 0.35f }, { "even", 0.25f },
-                                       { "freq", 2800 }, { "res", 0.1f }, { "pickFilter", 0.2f },
-                                       { "voiceMix", 0.25f }, { "voiceWave", 1 }, { "voiceTone", 2500 }, { "voiceGlide", 0.06f }, { "voiceMono", 1 }, { "voiceCharacter", 0.3f },
-                                       { "vibDepth", 8 }, { "vibRate", 5.2f }, { "vibDelay", 0.4f }, { "vibTarget", 1 }, { "vibHuman", 1 },
-                                       { "smearOn", 1 }, { "smearSize", 0.45f }, { "smearLevel", 0.25f } } },
-            // bowed attack, a violin body, singing vibrato
-            { "Violin", "Lead", { { "attack", 400 }, { "even", 0.5f }, { "sustain", 0.45f }, { "smoothRepick", 1 },
-                                  { "slope", 0 }, { "freq", 6000 }, { "mod", 0.15f }, { "bodyIr", 1 }, { "bodyMix", 0.8f },
-                                  { "smearOn", 1 }, { "smearSize", 0.35f }, { "smearLevel", 0.15f },   // BODY lives in SPACE: a small room
-                                  { "voiceMix", 0.35f }, { "voiceWave", 1 }, { "voiceGlide", 0.05f }, { "voiceMono", 1 },
-                                  { "vibDepth", 14 }, { "vibDelay", 0.35f }, { "vibTarget", 1 }, { "vibHuman", 1 } } },
-            // the VG-8 bowed pad under the guitar, a driven gated reverb, a little chorus-like detune (the mk.gee kind of sound)
-            { "Gated VG", "Lead", { { "vol", -4.5f }, { "attack", 400 }, { "sustain", 0.4f }, { "even", 0.3f }, { "dry", 0.15f }, { "freq", 4000 },
-                                    { "voiceMix", 0.45f }, { "voiceWave", 7 }, { "voiceTone", 4000 }, { "voiceCharacter", 0.5f }, { "voiceUnison", 0.2f },
-                                    { "detuneMix", 0.3f }, { "vibDepth", 5 }, { "vibRate", 4.5f }, { "vibTarget", 2 },
-                                    { "smearOn", 1 }, { "smearSize", 0.55f }, { "smearLevel", 0.5f }, { "smearDrive", 0.5f },
-                                    { "smearGate", 1 }, { "smearHold", 150 }, { "smearCut", 40 } } },
+            // the owner's own (tuned by ear, 2026-11-24)
+            { "Default dynamic", "Default", { { "attack", 1541 }, { "freq", 5000 }, { "sustain", 0.35f }, { "touch", 0.4f }, { "follow", 0.5f },
+                                      { "feedback", 0.2f }, { "fbRise", 0.4f }, { "pickFilter", 0.3f }, { "voiceOn", 0 }, { "even", 0.3f } } },
+            // the owner's own (tuned by ear, 2026-11-24)
+            { "Smooth lead", "Lead", { { "attack", 350 }, { "freq", 2800 }, { "res", 0.1f }, { "sustain", 0.55f }, { "touch", 0.3f },
+                                      { "follow", 0.35f }, { "feedback", 0.132f }, { "fbRise", 0.2f }, { "fbTone", 429 }, { "tremolo", 0.091f },
+                                      { "tremRate", 4.64f }, { "fbMode", 1 }, { "pickFilter", 0.2f }, { "detuneMix", 0.055f }, { "voiceMix", 0.2f },
+                                      { "voiceGlide", 0.06f }, { "voiceMono", 1 }, { "vibHuman", 1 }, { "voiceTone", 1546 },
+                                      { "voiceUnison", 0.266f }, { "even", 0.25f }, { "smearOn", 1 }, { "smearLevel", 0.25f },
+                                      { "smearSize", 0.45f }, { "voiceCharacter", 0.23f }, { "vibDepth", 8 }, { "vibRate", 5.2f },
+                                      { "vibTarget", 1 } } },
+            // the owner's own VIOLIN (2026-11-24): BOWED curve, violin body S2, the voice fully in, a small room
+            { "Violin", "Lead", { { "attack", 450 }, { "freq", 9000 }, { "mod", 0.38f }, { "res", 0.703f }, { "sustain", 0.25f }, { "slope", 0 },
+                                      { "detune", 0 }, { "touch", 0.27f }, { "follow", 0.748f }, { "feedback", 0.368f }, { "fbRise", 0.2f },
+                                      { "spreadMode", 4 }, { "fbMode", 1 }, { "pickFilter", 0.52f }, { "detuneMix", 0.055f }, { "voiceMix", 1 },
+                                      { "voiceGlide", 0.042f }, { "voiceMono", 1 }, { "vibHuman", 1 }, { "voiceTone", 12000 }, { "swellShape", 1 },
+                                      { "smoothRepick", 1 }, { "bodyIr", 7 }, { "smearOn", 1 }, { "smearLevel", 0.281f }, { "smearSize", 0.078f },
+                                      { "vibDepth", 10.8f }, { "vibRate", 4.36f }, { "vibDelay", 0.35f } } },
+            // the owner's own (2026-11-24): the mk.gee kind of sound - a supersaw voice under a BOWED swell, violin body, tremolo
+            { "Mk.gee", "Lead", { { "attack", 546.2f }, { "freq", 1518 }, { "mod", 0.18f }, { "sustain", 0.676f }, { "slope", 1 },
+                                      { "detune", 5.9f }, { "touch", 0.32f }, { "follow", 0.876f }, { "feedback", 0.208f }, { "fbRise", 0.25f },
+                                      { "tremolo", 0.228f }, { "tremRate", 9.36f }, { "spread", 0.352f }, { "spreadMode", 4 }, { "pickFilter", 1 },
+                                      { "detuneMix", 0.055f }, { "voiceMix", 0.412f }, { "voiceWave", 0 }, { "voiceGlide", 0.042f },
+                                      { "voiceMono", 1 }, { "vibHuman", 1 }, { "voiceTone", 1403 }, { "voiceUnison", 0.108f }, { "swellShape", 1 },
+                                      { "smoothRepick", 1 }, { "bodyIr", 7 }, { "smearOn", 1 }, { "smearLevel", 0.281f }, { "smearSize", 0.078f },
+                                      { "vibDepth", 6.4f }, { "vibRate", 3 }, { "vibTarget", 1 } } },
             // slow, wide, a pad voice under it, the reverb blooming with the swell
             { "Ambient pad", "Pad", { { "vol", 4.5f }, { "attack", 2500 }, { "sustain", 0.8f }, { "even", 0.4f }, { "freq", 2200 }, { "mod", 0.25f },
                                       { "voiceMix", 0.4f }, { "voiceWave", 7 }, { "voiceTone", 3000 }, { "voiceUnison", 0.4f }, { "voiceCharacter", 0.3f },
@@ -308,20 +312,20 @@ juce::AudioProcessorValueTreeState::ParameterLayout PolySwellProcessor::createLa
     l.add (std::make_unique<APF> (PID { "driveTone", 1 }, "Drive Tone", juce::NormalisableRange<float> (0.f, 1.f, 0.01f), 0.5f));
     l.add (std::make_unique<APF> (PID { "driveWow", 1 }, "Drive Wow", juce::NormalisableRange<float> (0.f, 1.f, 0.01f), 0.2f));
     // SMEAR: gated reverb + drive (after the Rainger FX Reverb-X)
-    l.add (std::make_unique<juce::AudioParameterBool> (PID { "smearOn", 1 }, "Smear On", false));
-    l.add (std::make_unique<APF> (PID { "smearLevel", 1 }, "Smear Level", juce::NormalisableRange<float> (0.f, 1.f, 0.001f), 0.5f));
-    l.add (std::make_unique<APF> (PID { "smearSize", 1 }, "Smear Size", juce::NormalisableRange<float> (0.f, 1.f, 0.001f), 0.5f));
-    l.add (std::make_unique<APF> (PID { "smearDrive", 1 }, "Smear Drive", juce::NormalisableRange<float> (0.f, 1.f, 0.001f), 0.f));
-    l.add (std::make_unique<juce::AudioParameterBool> (PID { "smearGate", 1 }, "Smear Gate", false));
-    l.add (std::make_unique<juce::AudioParameterBool> (PID { "smearDark", 1 }, "Smear Dark", false));
-    l.add (std::make_unique<APF> (PID { "smearHold", 1 }, "Smear Gate Hold",
+    l.add (std::make_unique<juce::AudioParameterBool> (PID { "smearOn", 1 }, "Space On", false));
+    l.add (std::make_unique<APF> (PID { "smearLevel", 1 }, "Space Level", juce::NormalisableRange<float> (0.f, 1.f, 0.001f), 0.5f));
+    l.add (std::make_unique<APF> (PID { "smearSize", 1 }, "Space Size", juce::NormalisableRange<float> (0.f, 1.f, 0.001f), 0.5f));
+    l.add (std::make_unique<APF> (PID { "smearDrive", 1 }, "Space Drive", juce::NormalisableRange<float> (0.f, 1.f, 0.001f), 0.f));
+    l.add (std::make_unique<juce::AudioParameterBool> (PID { "smearGate", 1 }, "Space Gate", false));
+    l.add (std::make_unique<juce::AudioParameterBool> (PID { "smearDark", 1 }, "Space Dark", false));
+    l.add (std::make_unique<APF> (PID { "smearHold", 1 }, "Space Gate Hold",
            juce::NormalisableRange<float> (0.f, 1000.f, 1.f, 0.5f), 150.f, juce::AudioParameterFloatAttributes().withLabel ("ms")));
-    l.add (std::make_unique<APF> (PID { "smearCut", 1 }, "Smear Gate Cut",
+    l.add (std::make_unique<APF> (PID { "smearCut", 1 }, "Space Gate Cut",
            juce::NormalisableRange<float> (2.f, 500.f, 1.f, 0.4f), 40.f, juce::AudioParameterFloatAttributes().withLabel ("ms")));
-    l.add (std::make_unique<juce::AudioParameterChoice> (PID { "smearSend", 1 }, "Smear Send",
+    l.add (std::make_unique<juce::AudioParameterChoice> (PID { "smearSend", 1 }, "Space Send",
            juce::StringArray { "Always", "Follows swell", "Pedal" }, 0));
-    l.add (std::make_unique<APF> (PID { "smearPress", 1 }, "Smear Press", juce::NormalisableRange<float> (0.f, 1.f, 0.001f), 1.f));
-    l.add (std::make_unique<APF> (PID { "smearThresh", 1 }, "Smear Thresh",
+    l.add (std::make_unique<APF> (PID { "smearPress", 1 }, "Space Press", juce::NormalisableRange<float> (0.f, 1.f, 0.001f), 1.f));
+    l.add (std::make_unique<APF> (PID { "smearThresh", 1 }, "Space Thresh",
            juce::NormalisableRange<float> (-80.f, 0.f, 0.1f), -80.f, juce::AudioParameterFloatAttributes().withLabel ("dB")));
     l.add (std::make_unique<APF> (PID { "voiceString", 1 }, "Voice String", juce::NormalisableRange<float> (0.f, 1.f, 0.01f), 0.f));
     l.add (std::make_unique<APF> (PID { "voiceCharacter", 1 }, "Voice Character", juce::NormalisableRange<float> (0.f, 1.f, 0.01f), 0.f));
@@ -937,10 +941,10 @@ void PolySwellProcessor::setParam (const char* id, float v)
     }
 }
 
-void PolySwellProcessor::setCurrentProgram (int i)
+// the clean base every stock preset starts from: every parameter at its default (bypass, limiter and low latency belong to
+// the setup and stay), then defaultSetup(). `ui_snapshot --params (base)` prints it, to turn a saved preset into a stock one.
+void PolySwellProcessor::applyBase()
 {
-    i = juce::jlimit (0, getNumPrograms() - 1, i);
-    // Default: every parameter at its default (bypass, limiter and low latency belong to the setup and stay)
     for (auto* prm : getParameters())
         if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (prm))
         {
@@ -950,6 +954,12 @@ void PolySwellProcessor::setCurrentProgram (int i)
         }
     gen2Defaults();
     for (auto& kv : defaultSetup()) setParam (kv.first, kv.second);
+}
+
+void PolySwellProcessor::setCurrentProgram (int i)
+{
+    i = juce::jlimit (0, getNumPrograms() - 1, i);
+    applyBase();
     const auto& np = newPresets()[(size_t) i];
     for (auto& kv : np.set) setParam (kv.first, kv.second);
     currentProgram = i;
