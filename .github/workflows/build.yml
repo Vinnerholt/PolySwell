@@ -49,6 +49,22 @@ jobs:
         if: runner.os == 'macOS'
         run: cmake --build build --config Release --target PolySwell_VST3 PolySwell_AU --parallel
 
+      - name: Validate the Audio Unit (auval - the same check Logic runs at start)
+        if: runner.os == 'macOS'
+        run: |
+          COMP="$HOME/Library/Audio/Plug-Ins/Components/PolySwell II.component"
+          mkdir -p "$HOME/Library/Audio/Plug-Ins/Components"
+          rm -rf "$COMP"
+          cp -R "build/PolySwell_artefacts/Release/AU/PolySwell II.component" "$COMP"
+          codesign --force --deep --sign - "$COMP"
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+          sleep 2
+          auval -a | grep -i "Psw2" || true
+          TYPE=$(auval -a | awk '$2 == "Psw2" && $3 == "Ynam" { print $1; exit }')
+          echo "Audio Unit type: ${TYPE:-not found}"
+          test -n "$TYPE"
+          auval -v "$TYPE" Psw2 Ynam
+
       - name: Package (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
