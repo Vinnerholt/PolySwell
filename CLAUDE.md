@@ -280,3 +280,7 @@ Slow gear, Reverse tape (MATCH off), Envelope filter, Warble. LEVEL per preset s
   is never silent: `wakeModule` sets FEEDBACK 0.3 / LAYER MIX 0.3 / SPACE LEVEL 0.4 / MOTION vibrato 8 c when its amount is 0
   (presets loading are not affected). Input meter 4 px with a tooltip (`meterRect`). Zone words 9.5 px, curve pictures
   69 x 19, panel setting names 10 px.
+- BODY moved from FILTER to SPACE (owner: it is an IR loader / fixed resonance, not a per-note sweep): SPACE = "Body and
+  room", boxes BODY (TYPE, MIX) | INPUT (FEED, ONLY ABOVE) | GATE (ON, HOLD, FADE), DARK in the header. BODY follows
+  SPACE's switch now (processor: `smearOn`, was `filterOn`); the Violin preset gets SPACE on with a small room (0.35 / 0.15).
+- MOTION: VIBRATO | TREMOLO on top, one WIDTH box below: SPREAD + PLACE, DETUNE + CENTS (`detune`, also in the gear menu).

@@ -101,7 +101,7 @@ const ModDef kMods[6] = {
     { "MOTION",   "Movement per note",       "motionOn",   col::motion },
     { "LAYER",    "Synth under each note",   "voiceOn",    col::layer },
     { "",         "",                        nullptr,      col::hold },   // unused slot (HOLD was removed)
-    { "SPACE",    "Follows the swell",       "smearOn",    col::space } };
+    { "SPACE",    "Body and room",           "smearOn",    col::space } };
 
 // a small line icon per module, in its header
 void drawModIcon (Graphics& g, int i, Rect r, Colour c)
@@ -2565,23 +2565,8 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
             label (kMods[i].sub, { r.getX() + 72 + tw, r.getY() + 11, r.getWidth() - 84 - tw, 20 }, 12.5f, col::dimText, juce::Justification::centredLeft, false, 0.03f);
         }
 
-        // FILTER
+        // FILTER (BODY moved to SPACE: it is a fixed resonance on the whole sound, not a per-note sweep)
         knobRow (0, { { "mod", "MOD" }, { "res", "RES" }, { "pickFilter", "DYN" } });
-        {
-            bodyC = chip (Chip::custom, "", "BODY", kMods[0].ac, "BODY: an instrument's resonance on the sound - the VG-8 bowed tone curve, or a violin body. Part of FILTER (off with it).", g);
-            bodyC->textFn = [this]
-            {
-                const int ir = juce::roundToInt (getParam ("bodyIr"));
-                if (ir > 0) return proc.apvts.getParameter ("bodyIr")->getCurrentValueAsText().toUpperCase();
-                return String (getParam ("bowedBody") > 0.5f ? "VG-8 TONE" : "OFF");
-            };
-            bodyC->litFn = [this] { return getParam ("bodyIr") > 0.5f || getParam ("bowedBody") > 0.5f; };
-            bodyC->setSize (96, 22);
-            bodyC->onPress = [this] { bodyMenu(); };
-            bodyMixC = valueChip ("bodyMix", "MIX", 76, kMods[0].ac, g);   // only for a body IR (faded otherwise)
-            label ("BODY", { rowX (0), rowY (0, 0), 40.f, 22.f }, 10.5f, col::chipText, juce::Justification::centredLeft, true, 0.2f);
-            flow ({ bodyC, bodyMixC }, rowX (0) + 44.f, rowY (0, 0));
-        }
         // FEEDBACK
         knobRow (1, { { "feedback", "FEEDBACK" }, { "fbDistance", "DISTANCE" }, { "fbRise", "RISE" }, { "fbTone", "TONE" } });
         flow ({ chip (Chip::toggle, "fbAmp", "REAL AMP", kMods[1].ac, "REAL AMP: the amp-in-the-room model. DISTANCE picks the harmonic, it takes over from the note, muting the string stops it.", g),
@@ -2594,13 +2579,17 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
             const Colour ac = kMods[2].ac;
             const float bw = (r.getWidth() - 24.f) * 0.5f, x0 = r.getX() + 10.f, x1 = x0 + bw + 4.f;
             const float yA = r.getY() + 38.f, hA = 112.f, yB = yA + hA + 4.f, hB = r.getBottom() - 8.f - yB;
+            // the bottom: one WIDTH box - SPREAD (each note its own place) and DETUNE (copies just sharp and flat)
+            const Rect wide { x0, yB, 2.f * bw + 4.f, hB };
             const Rect boxes[4] = { { x0, yA, bw, hA }, { x1, yA, bw, hA }, { x0, yB, bw, hB }, { x1, yB, bw, hB } };
             const char* ids[4] = { "vibDepth", "tremolo", "spread", "detuneMix" }; const char* names[4] = { "VIBRATO", "TREMOLO", "SPREAD", "DETUNE" };
+            subBoxes.push_back ({ wide, ac });
+            label ("WIDTH", { wide.getCentreX() - 30.f, yB + 3.f, 60.f, 12.f }, 9.5f, col::dimText, juce::Justification::centred, true, 0.2f);
             for (int c = 0; c < 4; ++c)
             {
                 const auto& bx = boxes[c];
-                subBoxes.push_back ({ bx, ac });
-                const float kcx = c == 3 ? bx.getCentreX() : bx.getX() + 32.f, kcy = bx.getY() + (c < 2 ? 40.f : 28.f);
+                if (c < 2) subBoxes.push_back ({ bx, ac });
+                const float kcx = bx.getX() + 32.f, kcy = bx.getY() + (c < 2 ? 40.f : 28.f);
                 knob (ids[c], names[c], 2, kcx, kcy, ac, g, 50);
                 label (names[c], { kcx - 40.f, kcy + 26.f, 80.f, 12.f }, 10.f, col::chipText, juce::Justification::centred, true, 0.12f);
             }
@@ -2635,7 +2624,9 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
             shape->setSize (66, 22); addAndMakeVisible (shape); g.add (shape);
             named (shape, "SHAPE", sx1, yA + 37.f);
             auto* mode = chip (Chip::menu, "spreadMode", "", ac, "How SPREAD places the notes.", g); mode->setSize (64, 22);
-            named (mode, "PLACE", boxes[2].getRight() - 38.f, yB + 6.f);
+            named (mode, "PLACE", boxes[2].getRight() - 38.f, yB + 16.f);
+            auto* cents = valueChip ("detune", "", 0, ac, g);   // the copies' distance in cents (POG2: 10.1)
+            named (cents, "CENTS", boxes[3].getRight() - 46.f, yB + 16.f);
         }
         // LAYER, across the full width: knobs, octave / MONO / UNISON (a fader) on the left; on the right a scope of the
         // voice's wave (TONE rounds it, UNISON spreads copies that drift in and out of phase) over the nine wave buttons
@@ -2669,30 +2660,49 @@ struct PolySwellEditor::Board : juce::Component, Host, juce::Timer
             waveGrid->setBounds (juce::roundToInt (wx + 8.f), juce::roundToInt (r.getY() + 102.f), juce::roundToInt (ww - 16.f), juce::roundToInt (r.getHeight() - 116.f));
             addAndMakeVisible (*waveGrid); g.add (waveGrid.get());
         }
-        // SPACE: three knobs; below them what feeds the reverb (IN) and how it stops (GATE), each in a box
+        // SPACE ("Body and room"): the reverb's three knobs; below them the instrument BODY, what feeds the reverb (INPUT)
+        // and how it stops (GATE), each in a box; DARK in the header
         {
             const auto r = moduleRect (5);
             const Colour ac = kMods[5].ac;
             knobRow (5, { { "smearSize", "SIZE" }, { "smearLevel", "LEVEL" }, { "smearDrive", "DRIVE" } });
-            const float bw = (r.getWidth() - 24.f) * 0.5f, by = r.getY() + 120.f, bh = r.getHeight() - 128.f;
-            const float lx = r.getX() + 10.f, rx = lx + bw + 4.f;
-            subBoxes.push_back ({ Rect (lx, by, bw, bh), ac });
-            subBoxes.push_back ({ Rect (rx, by, bw, bh), ac });
-            label ("INPUT", { lx + 8.f, by + 4.f, 50.f, 12.f }, 10.f, col::chipText, juce::Justification::centredLeft, true, 0.2f);
-            label ("GATE", { rx + 8.f, by + 4.f, 60.f, 12.f }, 10.f, col::chipText, juce::Justification::centredLeft, true, 0.2f);
+            const float bw = (r.getWidth() - 20.f - 8.f) / 3.f, by = r.getY() + 120.f, bh = r.getHeight() - 128.f;
+            const float x0 = r.getX() + 10.f, x1 = x0 + bw + 4.f, x2 = x1 + bw + 4.f;
+            for (float bx : { x0, x1, x2 }) subBoxes.push_back ({ Rect (bx, by, bw, bh), ac });
+            label ("BODY", { x0 + 7.f, by + 4.f, 50.f, 12.f }, 10.f, col::chipText, juce::Justification::centredLeft, true, 0.2f);
+            label ("INPUT", { x1 + 7.f, by + 4.f, 50.f, 12.f }, 10.f, col::chipText, juce::Justification::centredLeft, true, 0.2f);
+            label ("GATE", { x2 + 7.f, by + 4.f, 40.f, 12.f }, 10.f, col::chipText, juce::Justification::centredLeft, true, 0.2f);
+            // BODY: the VG-8 bowed tone curve or a violin body (an impulse response), on guitar and voice
+            bodyC = chip (Chip::custom, "", "BODY", ac, "BODY: an instrument's resonance on the whole sound - the VG-8 bowed tone curve, or a violin body "
+                                                       "(an impulse response; you can load your own). Part of SPACE (off with it).", g);
+            bodyC->textFn = [this]
+            {
+                const int ir = juce::roundToInt (getParam ("bodyIr"));
+                if (ir > 0) return proc.apvts.getParameter ("bodyIr")->getCurrentValueAsText().toUpperCase().replace ("VIOLIN ", "VIOL. ");
+                return String (getParam ("bowedBody") > 0.5f ? "VG-8" : "OFF");
+            };
+            bodyC->litFn = [this] { return getParam ("bodyIr") > 0.5f || getParam ("bowedBody") > 0.5f; };
+            bodyC->setSize ((int) bw - 10, 22);
+            bodyC->onPress = [this] { bodyMenu(); };
+            bodyMixC = valueChip ("bodyMix", "", 0, ac, g);   // only for a body IR (faded otherwise)
+            named (bodyC, "TYPE", x0 + bw * 0.5f, by + 27.f);
+            named (bodyMixC, "MIX", x0 + bw * 0.5f, by + 61.f);
+            // INPUT
             auto* send = chip (Chip::menu, "smearSend", "", ac, "What feeds the reverb: always, following the swell, or an expression pedal.", g);
-            send->setSize (juce::jmin (send->getWidth(), (int) bw - 16), 22);
+            send->setSize (juce::jmin (send->getWidth(), (int) bw - 10), 22);
             auto* thr = valueChip ("smearThresh", "", 0, ac, g);
-            auto* dark = chip (Chip::toggle, "smearDark", "DARK", ac, "A darker reverb.", g);
-            named (send, "FEED", lx + bw * 0.5f, by + 27.f);
-            named (thr, "ONLY ABOVE", lx + bw * 0.5f, by + 61.f);
-            dark->setTopLeftPosition (juce::roundToInt (lx + bw - 8.f - (float) dark->getWidth()), juce::roundToInt (by + 2.f));
+            named (send, "FEED", x1 + bw * 0.5f, by + 27.f);
+            named (thr, "ONLY ABOVE", x1 + bw * 0.5f, by + 61.f);
+            // GATE
             auto* gate = chip (Chip::toggle, "smearGate", "ON", ac, "Gate: the reverb is cut shortly after you stop playing.", g);
             gateHold = valueChip ("smearHold", "", 0, ac, g);
             gateCut  = valueChip ("smearCut", "", 0, ac, g);
-            gate->setTopLeftPosition (juce::roundToInt (rx + bw - 8.f - (float) gate->getWidth()), juce::roundToInt (by + 2.f));
-            named (gateHold, "HOLD", rx + bw * 0.5f, by + 27.f);
-            named (gateCut, "FADE", rx + bw * 0.5f, by + 61.f);
+            gate->setTopLeftPosition (juce::roundToInt (x2 + bw - 6.f - (float) gate->getWidth()), juce::roundToInt (by + 2.f));
+            named (gateHold, "HOLD", x2 + bw * 0.5f, by + 27.f);
+            named (gateCut, "FADE", x2 + bw * 0.5f, by + 61.f);
+            // DARK: the reverb's tone, in the header's free right end
+            auto* dark = chip (Chip::toggle, "smearDark", "DARK", ac, "A darker reverb.", g);
+            dark->setTopLeftPosition (juce::roundToInt (r.getRight() - 12.f - (float) dark->getWidth()), juce::roundToInt (r.getY() + 9.f));
         }
     }
 

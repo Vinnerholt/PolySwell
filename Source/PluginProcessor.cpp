@@ -43,6 +43,7 @@ namespace
             // bowed attack, a violin body, singing vibrato
             { "Violin", "Lead", { { "attack", 400 }, { "even", 0.5f }, { "sustain", 0.45f }, { "smoothRepick", 1 },
                                   { "slope", 0 }, { "freq", 6000 }, { "mod", 0.15f }, { "bodyIr", 1 }, { "bodyMix", 0.8f },
+                                  { "smearOn", 1 }, { "smearSize", 0.35f }, { "smearLevel", 0.15f },   // BODY lives in SPACE: a small room
                                   { "voiceMix", 0.35f }, { "voiceWave", 1 }, { "voiceGlide", 0.05f }, { "voiceMono", 1 },
                                   { "vibDepth", 14 }, { "vibDelay", 0.35f }, { "vibTarget", 1 }, { "vibHuman", 1 } } },
             // the VG-8 bowed pad under the guitar, a driven gated reverb, a little chorus-like detune (the mk.gee kind of sound)
@@ -632,7 +633,7 @@ void PolySwellProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     p.fbOneWins     = apvts.getRawParameterValue ("fbOneWins")->load() > 0.5f;
     p.uiTrack       = editorOpen.load (std::memory_order_relaxed);
     p.even          = pEven->load();
-    p.bowedBody     = pBowedBody->load() > 0.5f && apvts.getRawParameterValue ("filterOn")->load() > 0.5f;   // BODY is part of FILTER
+    p.bowedBody     = pBowedBody->load() > 0.5f && apvts.getRawParameterValue ("smearOn")->load() > 0.5f;   // BODY is part of SPACE
 
     swello::VoiceFx::Settings vfx;
     vfx.unison   = effective (ex.voiceUnison, pUnisonOn, 0.f);
@@ -767,7 +768,7 @@ void PolySwellProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     // ---- BODY IR (violin bodies or your own): convolution on the wet block, blended by BODY MIX
     const int irChoice = (int) std::lround (pBodyIr->load());
     if (irChoice != requestedIr.load()) { requestedIr = irChoice; triggerAsyncUpdate(); }
-    bodyMixSmooth.setTargetValue (irChoice > 0 && loadedIr == irChoice && apvts.getRawParameterValue ("filterOn")->load() > 0.5f ? pBodyMix->load() : 0.f);
+    bodyMixSmooth.setTargetValue (irChoice > 0 && loadedIr == irChoice && apvts.getRawParameterValue ("smearOn")->load() > 0.5f ? pBodyMix->load() : 0.f);   // BODY is part of SPACE
     if (bodyMixSmooth.isSmoothing() || bodyMixSmooth.getTargetValue() > 0.f)
     {
         juce::dsp::AudioBlock<float> inB (wetBuf.getArrayOfWritePointers(), 2, (size_t) n), outB (convBuf.getArrayOfWritePointers(), 2, (size_t) n);
